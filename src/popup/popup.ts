@@ -18,9 +18,6 @@ const selectFileBtn = document.getElementById("select-file-btn") as HTMLButtonEl
 const actionImage = document.getElementById("action-image") as HTMLButtonElement;
 const actionText = document.getElementById("action-text") as HTMLButtonElement;
 const actionMerge = document.getElementById("action-merge") as HTMLButtonElement;
-const assistantQuestion = document.getElementById("assistant-question") as HTMLTextAreaElement;
-const sendQuestion = document.getElementById("send-question") as HTMLButtonElement;
-const assistantBody = document.getElementById("assistant-body") as HTMLDivElement;
 const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
 const expandBtn = document.getElementById("expand-btn") as HTMLButtonElement;
 const storageBtn = document.getElementById("storage-btn") as HTMLButtonElement;
@@ -52,13 +49,6 @@ function debugLog(step: string, detail?: unknown): void {
   console.info(`[MiniSterling][popup] ${step}`);
 }
 
-type ChatRole = "user" | "assistant";
-
-interface ChatMessage {
-  role: ChatRole;
-  content: string;
-}
-
 type PopupActionMode = "default" | "merge" | "add-image" | "edit-text";
 
 interface WorkspaceHistoryItem {
@@ -76,8 +66,6 @@ interface PendingWorkspaceAction {
   imageDataUrl?: string;
   imageName?: string;
 }
-
-const chatHistory: ChatMessage[] = [];
 
 function setStatus(message: string): void {
   statusEl.textContent = message;
@@ -296,86 +284,12 @@ function arrayBufferToRuntimePayload(buffer: ArrayBuffer): { data: number[] } {
   return { data: Array.from(new Uint8Array(buffer)) };
 }
 
-function appendChatMessage(role: ChatRole, content: string): void {
-  chatHistory.push({ role, content });
-
-  const row = document.createElement("div");
-  row.className = `assistant-row ${role === "user" ? "assistant-row-user" : "assistant-row-bot"}`;
-
-  if (role === "assistant") {
-    const dot = document.createElement("span");
-    dot.className = "bot-dot";
-    dot.setAttribute("aria-hidden", "true");
-    dot.textContent = "◉";
-    row.appendChild(dot);
-  }
-
-  const text = document.createElement("p");
-  text.textContent = content;
-  row.appendChild(text);
-
-  assistantBody.appendChild(row);
-  assistantBody.scrollTop = assistantBody.scrollHeight;
-}
-
-function isPdfUrl(url?: string): boolean {
-  if (!url) {
-    return false;
-  }
-  const normalized = url.toLowerCase();
-  return /\.pdf([?#].*)?$/.test(normalized) || normalized.includes("application/pdf") || normalized.includes("pdfjs") || normalized.includes("/pdf/");
-}
-
-async function collectBrowserContext(): Promise<string> {
-  const tabs = await chrome.tabs.query({});
-  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  const pdfTabs = tabs.filter((tab) => isPdfUrl(tab.url));
-
-  const activeBlock = activeTab
-    ? `Pestana activa: ${activeTab.title ?? "(sin titulo)"}\nURL activa: ${activeTab.url ?? "(sin URL)"}`
-    : "Pestana activa: no disponible";
-
-  const pdfBlock = pdfTabs.length > 0
-    ? pdfTabs.map((tab, index) => `${index + 1}. ${tab.title ?? "(sin titulo)"} - ${tab.url ?? "(sin URL)"}`).join("\n")
-    : "No se detectaron pestanas con PDF.";
-
-  return `${activeBlock}\nTotal de pestanas: ${tabs.length}\nPDFs detectados:\n${pdfBlock}`;
-}
-
 async function getAIConfig(): Promise<{ endpoint: string; apiKey: string }> {
   const saved = await chrome.storage.local.get([AI_ENDPOINT_KEY, AI_APIKEY_KEY]);
   return {
     endpoint: (saved[AI_ENDPOINT_KEY] as string) ?? "",
     apiKey: (saved[AI_APIKEY_KEY] as string) ?? ""
   };
-}
-
-async function callAI(question: string): Promise<string> {
-  const config = await getAIConfig();
-  if (!config.endpoint || !config.apiKey) {
-    throw new Error("Configura endpoint y API key en Ajustes.");
-  }
-
-  const browserContext = await collectBrowserContext();
-  const response = await fetch(config.endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify({
-      question,
-      browserContext,
-      history: chatHistory.slice(-8)
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Error del endpoint IA: ${response.status}`);
-  }
-
-  const data = await response.json() as { answer?: string; response?: string; message?: string };
-  return data.answer ?? data.response ?? data.message ?? "Sin respuesta del servicio IA.";
 }
 
 async function openSettings(): Promise<void> {
@@ -706,30 +620,6 @@ actionText.addEventListener("click", () => {
   })();
 });
 
-sendQuestion.addEventListener("click", () => {
-  void (async () => {
-    const value = assistantQuestion.value.trim();
-    if (!value) {
-      setStatus("Escribe una pregunta para continuar.");
-      return;
-    }
-
-    appendChatMessage("user", value);
-    assistantQuestion.value = "";
-    setStatus("Consultando IA con contexto del navegador...");
-
-    try {
-      const answer = await callAI(value);
-      appendChatMessage("assistant", answer);
-      setStatus("Respuesta recibida.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo completar la consulta IA.";
-      appendChatMessage("assistant", `Error: ${message}`);
-      setStatus(message);
-    }
-  })();
-});
-
 settingsBtn.addEventListener("click", () => {
   void openSettings();
 });
@@ -811,13 +701,6 @@ utilityClearBtn.addEventListener("click", () => {
     renderUtilityRows([], "Storage limpiado.");
     setStatus("Storage local limpiado (sellos e historial).");
   })();
-});
-
-assistantQuestion.addEventListener("keydown", (event: KeyboardEvent) => {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    sendQuestion.click();
-  }
 });
 
 termsCheckbox.addEventListener("change", () => {

@@ -1,6 +1,4 @@
 import { PDFDocument } from "pdf-lib";
-import { AIChatClient } from "../services/ai/AIChatClient";
-import { PdfTextExtractor } from "../services/ai/PdfTextExtractor";
 import type { GetSessionDataRequest, GetSessionDataResponse } from "../shared/messaging/protocol";
 import { FabricOverlay, type StampPlacement } from "./canvas/FabricOverlay";
 import { PdfFlattenService, type TextPlacement } from "./export/PdfFlattenService";
@@ -33,25 +31,18 @@ const nextPageBtn = document.getElementById("next-page-btn") as HTMLButtonElemen
 const togglePagesBtn = document.getElementById("toggle-pages-btn") as HTMLButtonElement;
 const pagesResizer = document.getElementById("pages-resizer") as HTMLDivElement;
 const tabStamps = document.getElementById("tab-stamps") as HTMLButtonElement;
-const tabAi = document.getElementById("tab-ai") as HTMLButtonElement;
+const tabAi = document.getElementById("tab-ai") as HTMLButtonElement | null;
 const stampsPanel = document.getElementById("stamps-panel") as HTMLElement;
-const aiPanel = document.getElementById("ai-panel") as HTMLElement;
+const aiPanel = document.getElementById("ai-panel") as HTMLElement | null;
 const uploadStampBtn = document.getElementById("upload-stamp-btn") as HTMLButtonElement;
 const stampDropzone = document.getElementById("stamp-dropzone") as HTMLDivElement;
 const stampUploadInput = document.getElementById("stamp-upload-input") as HTMLInputElement;
 const stampLibraryEl = document.getElementById("stamp-library") as HTMLDivElement;
-const clearAiBtn = document.getElementById("clear-ai-btn") as HTMLButtonElement;
-const summarizeAiBtn = document.getElementById("summarize-ai-btn") as HTMLButtonElement;
-const askAiBtn = document.getElementById("ask-ai-btn") as HTMLButtonElement;
-const questionInput = document.getElementById("question-input") as HTMLTextAreaElement;
-const aiMessagesEl = document.getElementById("ai-messages") as HTMLDivElement;
 const canvasScrollArea = document.querySelector(".canvas-scroll-area") as HTMLDivElement;
 
 const renderer = new PdfRenderer();
 const overlay = new FabricOverlay(overlayCanvas);
 const flattenService = new PdfFlattenService();
-const textExtractor = new PdfTextExtractor();
-const aiClient = new AIChatClient();
 
 const STAMP_LIBRARY_KEY = "stampLibrary";
 const WORKSPACE_PENDING_ACTION_KEY = "workspacePendingAction";
@@ -63,11 +54,6 @@ interface StampLibraryItem {
   dataUrl: string;
   bytes: number[];
   createdAt: number;
-}
-
-interface AIConfig {
-  endpoint: string;
-  token: string;
 }
 
 interface PendingWorkspaceAction {
@@ -82,8 +68,8 @@ let sourceFileName = "documento.pdf";
 let renderScale = 1.25;
 let pageCount = 1;
 let currentPage = 1;
-let askAiInFlight = false;
 let pendingExportBlob: Blob | null = null;
+let pendingDownloadMode: "export" | "compress" = "export";
 let statusHideTimer: number | null = null;
 let draggingStampId: string | null = null;
 let textEditModeEnabled = false;
@@ -176,11 +162,11 @@ function updateDocumentMeta(): void {
   docStatsEl.textContent = `${pageCount} paginas`;
 }
 
-function getSuggestedExportName(): string {
+function getSuggestedExportName(mode: "export" | "compress" = "export"): string {
   const base = sourceFileName.toLowerCase().endsWith(".pdf")
     ? sourceFileName.slice(0, -4)
     : sourceFileName;
-  return `${base}_exportado`;
+  return mode === "compress" ? `${base}_comprimido` : `${base}_exportado`;
 }
 
 function normalizeExportFileName(rawName: string): string {
@@ -189,7 +175,7 @@ function normalizeExportFileName(rawName: string): string {
     .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
     .replace(/\s+/g, " ");
 
-  const fallback = getSuggestedExportName();
+  const fallback = getSuggestedExportName(pendingDownloadMode);
   const safeBase = stripped.length > 0 ? stripped : fallback;
   return safeBase.toLowerCase().endsWith(".pdf") ? safeBase : `${safeBase}.pdf`;
 }
@@ -200,7 +186,7 @@ function openExportNamePopover(): void {
   }
 
   exportNamePopover.hidden = false;
-  exportNameInput.value = getSuggestedExportName();
+  exportNameInput.value = getSuggestedExportName(pendingDownloadMode);
   exportNameInput.focus();
   exportNameInput.select();
 }
@@ -226,14 +212,8 @@ function downloadPendingExport(): void {
   URL.revokeObjectURL(downloadUrl);
 
   closeExportNamePopover(true);
-  setStatus(`PDF exportado correctamente como ${finalFileName}.`);
-}
-
-function setAskAiBusy(isBusy: boolean): void {
-  askAiInFlight = isBusy;
-  askAiBtn.disabled = isBusy;
-  askAiBtn.textContent = isBusy ? "Consultando..." : "Preguntar";
-  questionInput.disabled = isBusy;
+  const verb = pendingDownloadMode === "compress" ? "comprimido" : "exportado";
+  setStatus(`PDF ${verb} correctamente como ${finalFileName}.`);
 }
 
 function updateZoomIndicator(): void {
@@ -583,20 +563,16 @@ function normalizePdfBinary(value: unknown): ArrayBuffer {
   throw new Error(`Datos PDF invalidos recibidos (tipo: ${kind}).`);
 }
 
-function toggleToolTab(tab: "stamps" | "ai"): void {
-  const stampsActive = tab === "stamps";
+function toggleToolTab(tab: "stamps" | "ai" = "stamps"): void {
+  const stampsActive = tab !== "ai" || !tabAi || !aiPanel;
   tabStamps.classList.toggle("active", stampsActive);
-  tabAi.classList.toggle("active", !stampsActive);
+  if (tabAi) {
+    tabAi.classList.toggle("active", !stampsActive);
+  }
   stampsPanel.classList.toggle("active", stampsActive);
-  aiPanel.classList.toggle("active", !stampsActive);
-}
-
-function appendAiMessage(role: "user" | "bot", message: string): void {
-  const item = document.createElement("div");
-  item.className = `msg ${role}`;
-  item.textContent = message;
-  aiMessagesEl.appendChild(item);
-  aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+  if (aiPanel) {
+    aiPanel.classList.toggle("active", !stampsActive);
+  }
 }
 
 async function loadStampLibrary(): Promise<void> {
@@ -850,20 +826,15 @@ async function compressCurrentPdf(): Promise<void> {
   const preparedDoc = await PDFDocument.load(preparedBytes);
   const compressedBytes = await preparedDoc.save({ useObjectStreams: true, addDefaultPage: false });
 
-  const finalFileName = normalizeExportFileName(`${getSuggestedExportName().replace(/\.pdf$/i, "")}_comprimido`);
   const compressedBlob = new Blob([new Uint8Array(compressedBytes)], { type: "application/pdf" });
-
-  const downloadUrl = URL.createObjectURL(compressedBlob);
-  const link = document.createElement("a");
-  link.href = downloadUrl;
-  link.download = finalFileName;
-  link.click();
-  URL.revokeObjectURL(downloadUrl);
+  pendingExportBlob = compressedBlob;
+  pendingDownloadMode = "compress";
+  openExportNamePopover();
 
   const deltaKb = Math.round((originalBuffer.byteLength - compressedBlob.size) / 1024);
   const summary = deltaKb > 0
-    ? `PDF comprimido y descargado (${deltaKb} KB menos).`
-    : "PDF comprimido y descargado.";
+    ? `PDF comprimido listo (${deltaKb} KB menos). Define nombre y guarda.`
+    : "PDF comprimido listo. Define nombre y guarda.";
   setStatus(summary);
 }
 
@@ -1105,22 +1076,33 @@ function collectTextPlacementsFromSerialized(serialized: Record<string, unknown>
   return objects
     .map((obj) => obj as Record<string, unknown>)
     .filter((obj) => ["i-text", "textbox", "text"].includes(String(obj.type ?? "")))
-    .map((obj) => {
+    .map((obj): TextPlacement | null => {
       const width = Number(obj.width ?? 0) * Number(obj.scaleX ?? 1);
       const height = Number(obj.height ?? 0) * Number(obj.scaleY ?? 1);
       const fontSize = Number(obj.fontSize ?? 18) * Number(obj.scaleY ?? 1);
+      const objectKind = String(obj.miniObjectType ?? "");
+      const currentText = String(obj.text ?? "");
+      const originalText = String(obj.miniOriginalText ?? "");
+      const isDetectedBlock = objectKind === "pdf-text";
+      const isEditedReplacement = isDetectedBlock && currentText.trim() !== originalText.trim();
+
+      if (isDetectedBlock && !isEditedReplacement) {
+        return null;
+      }
+
       return {
         pageIndex,
         x: Number(obj.left ?? 0),
         y: Number(obj.top ?? 0),
         width,
         height,
-        text: String(obj.text ?? ""),
+        text: currentText,
         fontSize,
-        colorHex: normalizeColor(obj.fill)
+        colorHex: normalizeColor(obj.fill),
+        eraseOriginal: isEditedReplacement ? true : undefined
       };
     })
-    .filter((item) => Boolean(item.text.trim()));
+    .filter((item): item is TextPlacement => Boolean(item && item.text.trim()));
 }
 
 async function renderPageThumbs(): Promise<void> {
@@ -1390,14 +1372,6 @@ async function loadSessionPdf(): Promise<void> {
   }
 }
 
-async function getAIConfig(): Promise<AIConfig> {
-  const stored = await chrome.storage.local.get(["aiEndpoint", "aiToken", "aiApiKey"]);
-  return {
-    endpoint: (stored.aiEndpoint as string) ?? "https://api.company.example/mini-sterling/chat",
-    token: (stored.aiToken as string) ?? (stored.aiApiKey as string) ?? ""
-  };
-}
-
 function bufferToDataUrl(buffer: ArrayBuffer, mimeType: string): string {
   let binary = "";
   const bytes = new Uint8Array(buffer);
@@ -1463,6 +1437,7 @@ exportBtn.addEventListener("click", async () => {
   }
 
   pendingExportBlob = blob;
+  pendingDownloadMode = "export";
   openExportNamePopover();
   setStatus("Define el nombre de exportacion y confirma.");
 });
@@ -1503,71 +1478,11 @@ document.addEventListener("click", (event: MouseEvent) => {
     return;
   }
 
-  if (exportNamePopover.contains(target) || exportBtn.contains(target)) {
+  if (exportNamePopover.contains(target) || exportBtn.contains(target) || compressBtn.contains(target)) {
     return;
   }
 
   closeExportNamePopover(true);
-});
-
-askAiBtn.addEventListener("click", async () => {
-  if (askAiInFlight) {
-    return;
-  }
-
-  if (!sourcePdfBuffer) {
-    setStatus("Carga un PDF antes de usar el asistente IA.");
-    return;
-  }
-
-  const question = questionInput.value.trim();
-  if (!question) {
-    setStatus("Escribe una pregunta para el asistente.");
-    return;
-  }
-
-  appendAiMessage("user", question);
-  questionInput.value = "";
-  setAskAiBusy(true);
-
-  try {
-    const aiConfig = await getAIConfig();
-    if (!aiConfig.token) {
-      setStatus("Configura aiToken o aiApiKey en ajustes para usar IA.");
-      return;
-    }
-
-    setStatus("Extrayendo texto del PDF para IA...");
-    const text = await textExtractor.extractTextFromPdf(getSourcePdfBufferCopy());
-
-    setStatus("Consultando endpoint IA...");
-    const answer = await aiClient.ask({
-      endpoint: aiConfig.endpoint,
-      authToken: aiConfig.token,
-      question,
-      documentText: text
-    });
-
-    appendAiMessage("bot", answer);
-    setStatus("Respuesta IA recibida.");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Error al consultar IA.";
-    appendAiMessage("bot", `Error: ${message}`);
-    setStatus(message);
-  } finally {
-    setAskAiBusy(false);
-    questionInput.focus();
-  }
-});
-
-clearAiBtn.addEventListener("click", () => {
-  aiMessagesEl.innerHTML = "";
-  appendAiMessage("bot", "Chat limpiado. Escribe una nueva consulta sobre el PDF.");
-});
-
-summarizeAiBtn.addEventListener("click", () => {
-  questionInput.value = "Resume este PDF en 5 puntos accionables.";
-  questionInput.focus();
 });
 
 mergeBtn.addEventListener("click", () => {
@@ -1618,13 +1533,6 @@ stampUploadInput.addEventListener("change", () => {
   stampUploadInput.value = "";
 });
 
-questionInput.addEventListener("keydown", (event: KeyboardEvent) => {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    askAiBtn.click();
-  }
-});
-
 prevPageBtn.addEventListener("click", () => {
   void goToPage(currentPage - 1);
 });
@@ -1637,9 +1545,11 @@ tabStamps.addEventListener("click", () => {
   toggleToolTab("stamps");
 });
 
-tabAi.addEventListener("click", () => {
-  toggleToolTab("ai");
-});
+if (tabAi) {
+  tabAi.addEventListener("click", () => {
+    toggleToolTab("ai");
+  });
+}
 
 document.addEventListener("keydown", (event: KeyboardEvent) => {
   const targetTag = (event.target as HTMLElement | null)?.tagName?.toLowerCase();
@@ -1658,14 +1568,13 @@ document.addEventListener("keydown", (event: KeyboardEvent) => {
   }
 });
 
-appendAiMessage("bot", "Hola, soy tu asistente IA. Puedo ayudarte a resumir y analizar este PDF.");
-
 renderA4Placeholder();
 initializePagesSidebarControls();
 initializeStampDropzone();
 initializeCanvasStampDrop();
 initializeCanvasZoom();
 initializeCanvasPan();
+toggleToolTab("stamps");
 closeExportNamePopover(true);
 updateDocumentMeta();
 void renderPageThumbs();

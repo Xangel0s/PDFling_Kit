@@ -146,6 +146,9 @@ input {
   border-radius: 8px;
   border: 0;
   padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: #eef2f8;
   color: #293f62;
   font-size: 13px;
@@ -164,6 +167,9 @@ input {
   border-radius: 8px;
   border: 0;
   padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--accent-2);
   color: #ffffff;
   font-size: 13px;
@@ -175,6 +181,11 @@ input {
 .export-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.03);
+}
+
+.share-btn .material-symbols-outlined,
+.export-btn .material-symbols-outlined {
+  font-size: 18px;
 }
 
 .export-name-popover {
@@ -637,7 +648,7 @@ body.space-pan-active .canvas-stack > .canvas-container {
 
 .tool-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   border-bottom: 1px solid #e6edf8;
   padding: 8px;
   gap: 6px;
@@ -677,6 +688,11 @@ body.space-pan-active .canvas-stack > .canvas-container {
 .tool-panel.active {
   display: block;
   animation: panelIn 0.22s ease both;
+}
+
+#stamps-panel.tool-panel.active {
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-hint {
@@ -738,6 +754,54 @@ body.space-pan-active .canvas-stack > .canvas-container {
   grid-template-columns: 1fr;
   gap: 8px;
   margin-top: 10px;
+  flex: 1;
+  align-content: start;
+}
+
+.dev-support-card {
+  margin-top: 10px;
+  border: 1px solid #dbe4f2;
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.dev-support-title {
+  margin: 0;
+  font-size: 11px;
+  color: #7f8ea4;
+}
+
+.dev-support-sub {
+  margin: 0;
+  font-size: 10px;
+  color: #7c90ae;
+}
+
+.dev-heart {
+  color: #e25555;
+  font-size: 11px;
+}
+
+.dev-support-link,
+.dev-author-link {
+  color: #6e7f97;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.dev-support-link:hover,
+.dev-author-link:hover {
+  color: #576a86;
+}
+
+.dev-support-link.muted {
+  color: #7f8ea4;
 }
 
 .stamp-item {

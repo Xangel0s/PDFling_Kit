@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Mini Sterling",
+  "name": "PDFling",
   "version": "0.1.0",
   "description": "Procesa PDFs 100% en local para unir, firmar y consultar IA.",
   "permissions": ["storage", "tabs", "scripting"],
@@ -9,7 +9,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Mini Sterling"
+    "default_title": "PDFling"
   },
   "web_accessible_resources": [
     {

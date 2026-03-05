@@ -24,6 +24,7 @@ export interface TextPlacement {
   text: string;
   fontSize: number;
   colorHex: string;
+  eraseOriginal?: boolean;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -87,8 +88,21 @@ export class PdfFlattenService {
       const pageHeight = page.getHeight();
       const fontSize = Math.max(8, textItem.fontSize / input.renderScale);
       const pdfX = textItem.x / input.renderScale;
+      const pdfWidth = Math.max(1, textItem.width / input.renderScale);
+      const pdfHeight = Math.max(fontSize, textItem.height / input.renderScale);
+      const pdfRectY = pageHeight - (textItem.y / input.renderScale) - pdfHeight;
       const pdfY = pageHeight - (textItem.y / input.renderScale) - Math.max(fontSize, textItem.height / input.renderScale);
       const rgbColor = hexToRgb(textItem.colorHex);
+
+      if (textItem.eraseOriginal) {
+        page.drawRectangle({
+          x: pdfX,
+          y: pdfRectY,
+          width: pdfWidth,
+          height: pdfHeight,
+          color: rgb(1, 1, 1)
+        });
+      }
 
       page.drawText(textItem.text, {
         x: pdfX,
@@ -96,7 +110,7 @@ export class PdfFlattenService {
         size: fontSize,
         font,
         color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
-        maxWidth: textItem.width / input.renderScale
+        maxWidth: pdfWidth
       });
     }
 

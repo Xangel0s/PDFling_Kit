@@ -249,7 +249,8 @@ export class FabricOverlay {
         opacity: 0.96
       });
 
-      (textbox as fabric.Textbox & { miniObjectType?: string }).miniObjectType = "pdf-text";
+      (textbox as fabric.Textbox & { miniObjectType?: string; miniOriginalText?: string }).miniObjectType = "pdf-text";
+      (textbox as fabric.Textbox & { miniObjectType?: string; miniOriginalText?: string }).miniOriginalText = block.text;
 
       this.canvas.add(textbox);
       this.keepObjectInsideCanvas(textbox);
@@ -296,7 +297,7 @@ export class FabricOverlay {
   }
 
   serialize(): Record<string, unknown> {
-    return this.canvas.toJSON(["miniStampId", "miniObjectType"]);
+    return this.canvas.toJSON(["miniStampId", "miniObjectType", "miniOriginalText"]);
   }
 
   clear(): void {

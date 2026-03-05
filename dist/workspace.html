@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mesa de Trabajo - Mini Sterling</title>
+    <title>Mesa de Trabajo - PDFling</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,7 +18,7 @@
         <div class="brand" aria-label="Marca">
           <div class="brand-row">
             <span class="material-symbols-outlined brand-icon">auto_awesome</span>
-            <h1>Sterling</h1>
+            <h1>PDFling</h1>
           </div>
         </div>
         <div id="doc-meta" class="doc-meta">
@@ -30,8 +30,12 @@
       </div>
 
       <div class="topbar-primary-action">
-        <button id="compress-btn" type="button" class="share-btn">Comprimir</button>
+        <button id="compress-btn" type="button" class="share-btn">
+          <span class="material-symbols-outlined">compress</span>
+          <span>Comprimir</span>
+        </button>
         <button id="export-btn" type="button" class="export-btn">
+          <span class="material-symbols-outlined">download</span>
           <span>Exportar</span>
         </button>
         <div id="export-name-popover" class="export-name-popover" hidden>
@@ -96,24 +100,10 @@
 
       <aside class="tools-panel">
         <div class="tool-tabs">
-          <button id="tab-ai" class="tab-btn active" type="button">AI Assistant</button>
-          <button id="tab-stamps" class="tab-btn" type="button">Sellos</button>
+          <button id="tab-stamps" class="tab-btn active" type="button">Sellos</button>
         </div>
 
-        <section id="ai-panel" class="tool-panel active">
-          <p class="panel-hint">Arrastra al documento para aplicar.</p>
-          <div class="ai-tools">
-            <button id="summarize-ai-btn" type="button" class="ai-quick-btn">Resumir PDF</button>
-            <button id="clear-ai-btn" type="button" class="ai-quick-btn ghost">Limpiar</button>
-          </div>
-          <div id="ai-messages" class="ai-messages"></div>
-          <div class="ai-input-row">
-            <textarea id="question-input" placeholder="Ask anything..."></textarea>
-            <button id="ask-ai-btn" type="button">Enviar</button>
-          </div>
-        </section>
-
-        <section id="stamps-panel" class="tool-panel">
+        <section id="stamps-panel" class="tool-panel active">
           <p class="panel-hint">Importa imagenes y haz clic para aplicarlas en el PDF.</p>
           <input id="stamp-upload-input" class="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" multiple />
           <button id="upload-stamp-btn" class="ghost-btn full-btn" type="button">Importar Imagenes</button>
@@ -122,6 +112,14 @@
             <span>Arrastra imagenes aqui o haz clic para importar</span>
           </div>
           <div id="stamp-library" class="stamp-library"></div>
+          <div class="dev-support-card">
+            <p class="dev-support-title">
+              Desarrollado con <span class="dev-heart" aria-hidden="true">❤</span> por
+              <a class="dev-author-link" href="https://github.com/Xangel0s" target="_blank" rel="noopener noreferrer">Xangel0s</a>
+            </p>
+            <p class="dev-support-sub">Apoya el repositorio <span aria-hidden="true">★</span></p>
+            <a class="dev-support-link muted" href="https://github.com/Xangel0s/PDFling_Kit" target="_blank" rel="noopener noreferrer">github.com/Xangel0s/PDFling_Kit</a>
+          </div>
         </section>
       </aside>
     </main>
