@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mini Sterling</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,500,0,0&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
@@ -11,95 +17,108 @@
       <div id="welcome-shell" class="welcome-shell">
         <div id="welcome-card" class="modal-card">
           <h2 id="welcome-title">Bienvenido a Mini Sterling</h2>
-          <p class="modal-subtitle">Tu extension para procesar PDF 100% local y privado.</p>
-
+          <p class="modal-subtitle">Procesamiento local de PDF y ayuda IA bajo tu control.</p>
           <div class="feature-list">
             <article class="feature-item">
-              <span class="feature-icon" aria-hidden="true">PDF</span>
+              <span class="feature-icon material-symbols-outlined">layers</span>
               <div>
-                <h3>Unir y organizar archivos</h3>
-                <p>Ejemplo: combina contrato y anexo en un solo PDF.</p>
+                <h3>Unir y ordenar</h3>
+                <p>Combina multiples PDF en segundos.</p>
               </div>
             </article>
-
             <article class="feature-item">
-              <span class="feature-icon" aria-hidden="true">SIG</span>
+              <span class="feature-icon material-symbols-outlined">edit_square</span>
               <div>
-                <h3>Firmar y sellar visualmente</h3>
-                <p>Ejemplo: sube tu firma y arrastrala al lugar correcto.</p>
+                <h3>Firmar y sellar</h3>
+                <p>Agrega imagenes, firmas y texto.</p>
               </div>
             </article>
-
             <article class="feature-item">
-              <span class="feature-icon" aria-hidden="true">AI</span>
+              <span class="feature-icon material-symbols-outlined">psychology</span>
               <div>
-                <h3>Preguntar al asistente</h3>
-                <p>Ejemplo: "Resume este documento en 5 puntos".</p>
+                <h3>Analisis IA</h3>
+                <p>Resume y consulta contenido del PDF.</p>
               </div>
             </article>
           </div>
-
-          <section class="terms-box">
-            <h3>Terminos y condiciones</h3>
-            <p>
-              Aceptas el uso local de archivos y el envio de texto al endpoint corporativo
-              de IA solo cuando hagas una consulta.
-            </p>
-            <label class="terms-check">
-              <input id="terms-checkbox" type="checkbox" />
-              Acepto terminos y condiciones.
-            </label>
-          </section>
-
-          <button id="welcome-done" type="button" disabled>Listo!</button>
+          <label class="terms-check">
+            <input id="terms-checkbox" type="checkbox" />
+            Acepto terminos y condiciones para comenzar.
+          </label>
+          <button id="welcome-done" type="button" disabled>Comenzar</button>
         </div>
       </div>
     </div>
 
     <main class="container">
       <header class="topbar">
-        <h1>Mini Sterling</h1>
+        <div class="brand-wrap">
+          <div class="brand-icon-box">
+            <span class="material-symbols-outlined">auto_awesome</span>
+          </div>
+          <h1>Mini Sterling</h1>
+        </div>
         <div class="top-icons">
-          <button id="settings-btn" type="button" class="icon-btn" aria-label="Ajustes">⚙</button>
-          <button id="expand-btn" type="button" class="icon-btn" aria-label="Expandir">↗</button>
+          <button id="expand-btn" type="button" class="icon-btn" aria-label="Historial" title="Historial">
+            <span class="material-symbols-outlined">history</span>
+          </button>
+          <button id="storage-btn" type="button" class="icon-btn" aria-label="Storage" title="Storage">
+            <span class="material-symbols-outlined">folder</span>
+          </button>
+          <button type="button" class="icon-btn" aria-label="Ayuda" title="Ayuda">
+            <span class="material-symbols-outlined">help</span>
+          </button>
+          <button id="settings-btn" type="button" class="icon-btn" aria-label="Ajustes" title="Ajustes">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
         </div>
       </header>
 
       <section id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Seleccionar PDF">
-        <div class="drop-icon" aria-hidden="true">⇪</div>
-        <p class="drop-title">Arrastra un PDF aqui o haz clic</p>
-        <p class="drop-sub">Soporta archivos hasta 50MB</p>
+        <div class="drop-icon" aria-hidden="true">
+          <span class="material-symbols-outlined">upload_file</span>
+        </div>
+        <p class="drop-title">Upload PDF</p>
+        <p class="drop-sub">Drag and drop or click to browse</p>
+        <button id="select-file-btn" type="button" class="select-file-btn">Select File</button>
       </section>
 
       <input id="pdf-input" class="hidden-input" type="file" accept="application/pdf" />
+      <input id="merge-pdf-input" class="hidden-input" type="file" accept="application/pdf" multiple />
+      <input id="image-input" class="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" />
       <button id="open-workspace" type="button" class="hidden-action">Abrir Mesa de Trabajo</button>
 
       <section class="actions-grid">
         <button id="action-merge" type="button" class="action-card">
-          <span class="action-icon">▦</span>
+          <span class="action-icon material-symbols-outlined">layers</span>
           <span>Unir PDFs</span>
         </button>
-        <button id="action-sign" type="button" class="action-card">
-          <span class="action-icon">✎</span>
-          <span>Firmar/Sellar</span>
+        <button id="action-image" type="button" class="action-card">
+          <span class="action-icon material-symbols-outlined">image</span>
+          <span>Agregar Imagen</span>
         </button>
-        <button id="action-ask" type="button" class="action-card">
-          <span class="action-icon">✧</span>
-          <span>Preguntar a IA</span>
+        <button id="action-text" type="button" class="action-card">
+          <span class="action-icon material-symbols-outlined">text_fields</span>
+          <span>Editar Texto</span>
         </button>
       </section>
 
       <section class="assistant-card">
-        <div class="assistant-title">Asistente IA</div>
+        <div class="assistant-title">
+          <span class="material-symbols-outlined">chat</span>
+          <span>Mini Assistant</span>
+        </div>
         <div id="assistant-body" class="assistant-body">
           <div class="assistant-row assistant-row-bot">
-            <span class="bot-dot" aria-hidden="true">◉</span>
-            <p>iHola! Soy tu asistente Sterling. Puedo revisar la pestana actual y detectar PDFs en tus pestanas.</p>
+            <span class="bot-dot material-symbols-outlined" aria-hidden="true">smart_toy</span>
+            <p>Hello! Upload a PDF and I can summarize it or extract data for you.</p>
           </div>
         </div>
         <div class="assistant-input-row">
-          <textarea id="assistant-question" placeholder="Escribe tu pregunta..."></textarea>
-          <button id="send-question" type="button" class="send-btn" aria-label="Enviar">➤</button>
+          <textarea id="assistant-question" placeholder="Ask anything about your PDF..."></textarea>
+          <button id="send-question" type="button" class="send-btn" aria-label="Enviar">
+            <span class="material-symbols-outlined">send</span>
+          </button>
         </div>
       </section>
 
@@ -120,6 +139,17 @@
         <div class="settings-actions">
           <button id="settings-cancel" type="button" class="ghost-btn">Cancelar</button>
           <button id="settings-save" type="button">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="utility-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="utility-title">
+      <div class="settings-card">
+        <h2 id="utility-title">Historial</h2>
+        <div id="utility-body" class="utility-body"></div>
+        <div class="settings-actions">
+          <button id="utility-clear" type="button" class="ghost-btn">Limpiar</button>
+          <button id="utility-close" type="button">Cerrar</button>
         </div>
       </div>
     </div>

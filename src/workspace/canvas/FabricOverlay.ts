@@ -9,6 +9,15 @@ export interface StampPlacement {
   stampId: string;
 }
 
+export interface DetectedTextBlock {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+}
+
 export class FabricOverlay {
   private canvas: fabric.Canvas;
 
@@ -28,6 +37,23 @@ export class FabricOverlay {
       if (event.target) {
         this.keepObjectInsideCanvas(event.target);
       }
+    });
+
+    this.canvas.on("mouse:dblclick", (event) => {
+      const target = event.target;
+      const kind = String(target?.type ?? "");
+      if (!target || (kind !== "textbox" && kind !== "i-text" && kind !== "text")) {
+        return;
+      }
+
+      const editable = target as fabric.IText;
+      if (typeof editable.enterEditing === "function") {
+        editable.enterEditing();
+      }
+      if (typeof editable.selectAll === "function") {
+        editable.selectAll();
+      }
+      this.canvas.requestRenderAll();
     });
   }
 
@@ -72,6 +98,14 @@ export class FabricOverlay {
   }
 
   addStampImage(dataUrl: string, stampId: string): Promise<void> {
+    return this.addStampImageInternal(dataUrl, stampId);
+  }
+
+  addStampImageAt(dataUrl: string, stampId: string, x: number, y: number): Promise<void> {
+    return this.addStampImageInternal(dataUrl, stampId, { x, y });
+  }
+
+  private addStampImageInternal(dataUrl: string, stampId: string, dropPoint?: { x: number; y: number }): Promise<void> {
     return new Promise((resolve, reject) => {
       fabric.Image.fromURL(
         dataUrl,
@@ -93,11 +127,19 @@ export class FabricOverlay {
           const visibleWidth = sourceWidth * normalizedScale;
           const visibleHeight = sourceHeight * normalizedScale;
 
+          const baseLeft = dropPoint
+            ? (dropPoint.x - (visibleWidth / 2))
+            : Math.max(8, (canvasWidth - visibleWidth) / 2);
+          const baseTop = dropPoint
+            ? (dropPoint.y - (visibleHeight / 2))
+            : Math.max(8, (canvasHeight - visibleHeight) / 2);
+
           img.set({
-            left: Math.max(8, (canvasWidth - visibleWidth) / 2),
-            top: Math.max(8, (canvasHeight - visibleHeight) / 2),
-            scaleX: normalizedScale,
-            scaleY: normalizedScale,
+            left: baseLeft,
+            top: baseTop,
+            scaleX: normalizedScale * 0.86,
+            scaleY: normalizedScale * 0.86,
+            opacity: 0.2,
             cornerColor: "#1f4a80",
             transparentCorners: false
           });
@@ -107,6 +149,20 @@ export class FabricOverlay {
           this.canvas.add(img);
           this.keepObjectInsideCanvas(img);
           this.canvas.setActiveObject(img);
+          img.animate("scaleX", normalizedScale, {
+            duration: 180,
+            easing: fabric.util.ease.easeOutBack,
+            onChange: () => this.canvas.requestRenderAll()
+          });
+          img.animate("scaleY", normalizedScale, {
+            duration: 180,
+            easing: fabric.util.ease.easeOutBack,
+            onChange: () => this.canvas.requestRenderAll()
+          });
+          img.animate("opacity", 1, {
+            duration: 160,
+            onChange: () => this.canvas.requestRenderAll()
+          });
           this.canvas.requestRenderAll();
           resolve();
         },
@@ -144,7 +200,8 @@ export class FabricOverlay {
       fontFamily: "Helvetica",
       backgroundColor: "rgba(255,255,255,0.35)",
       cornerColor: "#1f4a80",
-      transparentCorners: false
+      transparentCorners: false,
+      opacity: 0
     });
 
     (textbox as fabric.Textbox & { miniObjectType?: string }).miniObjectType = "text";
@@ -152,7 +209,59 @@ export class FabricOverlay {
     this.canvas.add(textbox);
     this.keepObjectInsideCanvas(textbox);
     this.canvas.setActiveObject(textbox);
+    textbox.animate("opacity", 1, {
+      duration: 170,
+      onChange: () => this.canvas.requestRenderAll()
+    });
     this.canvas.requestRenderAll();
+  }
+
+  addDetectedTextBlocks(blocks: DetectedTextBlock[]): number {
+    const existing = this.canvas
+      .getObjects()
+      .filter((obj) => (obj as fabric.Object & { miniObjectType?: string }).miniObjectType === "pdf-text") as fabric.Textbox[];
+
+    let added = 0;
+
+    blocks.forEach((block) => {
+      const alreadyExists = existing.some((obj) => {
+        const sameText = (obj.text ?? "").trim() === block.text.trim();
+        const dx = Math.abs((obj.left ?? 0) - block.x);
+        const dy = Math.abs((obj.top ?? 0) - block.y);
+        return sameText && dx < 2 && dy < 2;
+      });
+
+      if (alreadyExists) {
+        return;
+      }
+
+      const textbox = new fabric.Textbox(block.text, {
+        left: block.x,
+        top: block.y,
+        width: Math.max(24, block.width),
+        fontSize: Math.max(10, block.fontSize),
+        fill: "#16335b",
+        fontFamily: "Helvetica",
+        cornerColor: "#1f4a80",
+        transparentCorners: false,
+        backgroundColor: "rgba(255,255,255,0.25)",
+        editable: true,
+        opacity: 0.96
+      });
+
+      (textbox as fabric.Textbox & { miniObjectType?: string }).miniObjectType = "pdf-text";
+
+      this.canvas.add(textbox);
+      this.keepObjectInsideCanvas(textbox);
+      existing.push(textbox);
+      added += 1;
+    });
+
+    if (added > 0) {
+      this.canvas.requestRenderAll();
+    }
+
+    return added;
   }
 
   removeActiveObject(): boolean {

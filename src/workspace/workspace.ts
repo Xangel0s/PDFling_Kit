@@ -4,14 +4,18 @@ import { PdfTextExtractor } from "../services/ai/PdfTextExtractor";
 import type { GetSessionDataRequest, GetSessionDataResponse } from "../shared/messaging/protocol";
 import { FabricOverlay, type StampPlacement } from "./canvas/FabricOverlay";
 import { PdfFlattenService, type TextPlacement } from "./export/PdfFlattenService";
-import { PdfRenderer } from "./render/PdfRenderer";
+import { PdfRenderer, type PageTextBlock } from "./render/PdfRenderer";
 
 const pdfCanvas = document.getElementById("pdf-canvas") as HTMLCanvasElement;
 const overlayCanvas = document.getElementById("overlay-canvas") as HTMLCanvasElement;
+const canvasStackEl = document.getElementById("canvas-stack") as HTMLDivElement;
 const mergeInput = document.getElementById("merge-input") as HTMLInputElement;
 const mergeBtn = document.getElementById("merge-btn") as HTMLButtonElement;
 const addImageBtn = document.getElementById("add-image-btn") as HTMLButtonElement;
+const editTextBtn = document.getElementById("edit-text-btn") as HTMLButtonElement;
 const addTextBtn = document.getElementById("add-text-btn") as HTMLButtonElement;
+const deleteObjectBtn = document.getElementById("delete-object-btn") as HTMLButtonElement;
+const compressBtn = document.getElementById("compress-btn") as HTMLButtonElement;
 const exportBtn = document.getElementById("export-btn") as HTMLButtonElement;
 const exportNamePopover = document.getElementById("export-name-popover") as HTMLDivElement;
 const exportNameInput = document.getElementById("export-name-input") as HTMLInputElement;
@@ -21,7 +25,9 @@ const statusEl = document.getElementById("workspace-status") as HTMLParagraphEle
 const docNameEl = document.getElementById("doc-name") as HTMLSpanElement;
 const docStatsEl = document.getElementById("doc-stats") as HTMLSpanElement;
 const pageListEl = document.getElementById("page-list") as HTMLDivElement;
+const pagesTitleEl = document.getElementById("pages-title") as HTMLHeadingElement;
 const pageIndicatorEl = document.getElementById("page-indicator") as HTMLSpanElement;
+const zoomIndicatorEl = document.getElementById("zoom-indicator") as HTMLSpanElement;
 const prevPageBtn = document.getElementById("prev-page-btn") as HTMLButtonElement;
 const nextPageBtn = document.getElementById("next-page-btn") as HTMLButtonElement;
 const togglePagesBtn = document.getElementById("toggle-pages-btn") as HTMLButtonElement;
@@ -31,6 +37,7 @@ const tabAi = document.getElementById("tab-ai") as HTMLButtonElement;
 const stampsPanel = document.getElementById("stamps-panel") as HTMLElement;
 const aiPanel = document.getElementById("ai-panel") as HTMLElement;
 const uploadStampBtn = document.getElementById("upload-stamp-btn") as HTMLButtonElement;
+const stampDropzone = document.getElementById("stamp-dropzone") as HTMLDivElement;
 const stampUploadInput = document.getElementById("stamp-upload-input") as HTMLInputElement;
 const stampLibraryEl = document.getElementById("stamp-library") as HTMLDivElement;
 const clearAiBtn = document.getElementById("clear-ai-btn") as HTMLButtonElement;
@@ -38,6 +45,7 @@ const summarizeAiBtn = document.getElementById("summarize-ai-btn") as HTMLButton
 const askAiBtn = document.getElementById("ask-ai-btn") as HTMLButtonElement;
 const questionInput = document.getElementById("question-input") as HTMLTextAreaElement;
 const aiMessagesEl = document.getElementById("ai-messages") as HTMLDivElement;
+const canvasScrollArea = document.querySelector(".canvas-scroll-area") as HTMLDivElement;
 
 const renderer = new PdfRenderer();
 const overlay = new FabricOverlay(overlayCanvas);
@@ -46,6 +54,7 @@ const textExtractor = new PdfTextExtractor();
 const aiClient = new AIChatClient();
 
 const STAMP_LIBRARY_KEY = "stampLibrary";
+const WORKSPACE_PENDING_ACTION_KEY = "workspacePendingAction";
 
 interface StampLibraryItem {
   id: string;
@@ -61,6 +70,13 @@ interface AIConfig {
   token: string;
 }
 
+interface PendingWorkspaceAction {
+  sessionId: string;
+  mode: "add-image" | "edit-text";
+  imageDataUrl?: string;
+  imageName?: string;
+}
+
 let sourcePdfBuffer: ArrayBuffer | null = null;
 let sourceFileName = "documento.pdf";
 let renderScale = 1.25;
@@ -68,9 +84,35 @@ let pageCount = 1;
 let currentPage = 1;
 let askAiInFlight = false;
 let pendingExportBlob: Blob | null = null;
+let statusHideTimer: number | null = null;
+let draggingStampId: string | null = null;
+let textEditModeEnabled = false;
+let isSpacePanReady = false;
+let isSpacePanning = false;
+let panStartClientX = 0;
+let panStartClientY = 0;
+let panStartScrollLeft = 0;
+let panStartScrollTop = 0;
 const pageOverlayState = new Map<number, Record<string, unknown>>();
 const stampLibrary = new Map<string, StampLibraryItem>();
 const pageThumbnailCache = new Map<number, string>();
+const A4_PLACEHOLDER_WIDTH = 595;
+const A4_PLACEHOLDER_HEIGHT = 842;
+const MIN_CANVAS_ZOOM = 0.4;
+const MAX_CANVAS_ZOOM = 2.5;
+const CANVAS_ZOOM_STEP = 0.1;
+let canvasZoom = 1;
+let lastCanvasScrollLeft = 0;
+let lastCanvasScrollTop = 0;
+
+function debugCanvasLog(step: string, detail?: unknown): void {
+  if (detail !== undefined) {
+    console.info(`[MiniSterling][canvas] ${step}`, detail);
+    return;
+  }
+
+  console.info(`[MiniSterling][canvas] ${step}`);
+}
 
 function remapPageStateAfterDelete<T>(source: Map<number, T>, deletedPage: number): Map<number, T> {
   const next = new Map<number, T>();
@@ -85,8 +127,37 @@ function remapPageStateAfterDelete<T>(source: Map<number, T>, deletedPage: numbe
   return next;
 }
 
-function setStatus(message: string): void {
+function setStatus(message: string, ttlMs = 4200): void {
+  if (statusHideTimer !== null) {
+    window.clearTimeout(statusHideTimer);
+    statusHideTimer = null;
+  }
+
   statusEl.textContent = message;
+  statusEl.classList.add("is-visible");
+
+  if (ttlMs <= 0) {
+    return;
+  }
+
+  statusHideTimer = window.setTimeout(() => {
+    statusEl.textContent = "";
+    statusEl.classList.remove("is-visible");
+    statusHideTimer = null;
+  }, ttlMs);
+}
+
+function renderA4Placeholder(): void {
+  pdfCanvas.width = A4_PLACEHOLDER_WIDTH;
+  pdfCanvas.height = A4_PLACEHOLDER_HEIGHT;
+  const ctx = pdfCanvas.getContext("2d");
+  if (ctx) {
+    ctx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+  }
+
+  overlay.resize(A4_PLACEHOLDER_WIDTH, A4_PLACEHOLDER_HEIGHT);
 }
 
 function truncateMiddle(value: string, maxLength = 48): string {
@@ -165,6 +236,217 @@ function setAskAiBusy(isBusy: boolean): void {
   questionInput.disabled = isBusy;
 }
 
+function updateZoomIndicator(): void {
+  zoomIndicatorEl.textContent = `${Math.round(canvasZoom * 100)}%`;
+}
+
+function clampCanvasScroll(source: string): void {
+  const maxLeft = Math.max(0, canvasScrollArea.scrollWidth - canvasScrollArea.clientWidth);
+  const maxTop = Math.max(0, canvasScrollArea.scrollHeight - canvasScrollArea.clientHeight);
+  const nextLeft = Math.max(0, Math.min(canvasScrollArea.scrollLeft, maxLeft));
+  const nextTop = Math.max(0, Math.min(canvasScrollArea.scrollTop, maxTop));
+
+  if (nextLeft !== canvasScrollArea.scrollLeft || nextTop !== canvasScrollArea.scrollTop) {
+    canvasScrollArea.scrollLeft = nextLeft;
+    canvasScrollArea.scrollTop = nextTop;
+    debugCanvasLog("clamp-scroll", { source, nextLeft, nextTop, maxLeft, maxTop });
+  }
+}
+
+function applyCanvasZoom(nextZoom: number): void {
+  const previousZoom = canvasZoom;
+  const viewportCenterX = canvasScrollArea.scrollLeft + (canvasScrollArea.clientWidth / 2);
+  const viewportCenterY = canvasScrollArea.scrollTop + (canvasScrollArea.clientHeight / 2);
+  const logicalCenterX = viewportCenterX / Math.max(previousZoom, 0.0001);
+  const logicalCenterY = viewportCenterY / Math.max(previousZoom, 0.0001);
+
+  const clamped = Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, nextZoom));
+  canvasZoom = Number(clamped.toFixed(2));
+  canvasStackEl.style.setProperty("zoom", String(canvasZoom));
+
+  const targetCenterX = logicalCenterX * canvasZoom;
+  const targetCenterY = logicalCenterY * canvasZoom;
+  canvasScrollArea.scrollLeft = Math.max(0, targetCenterX - (canvasScrollArea.clientWidth / 2));
+  canvasScrollArea.scrollTop = Math.max(0, targetCenterY - (canvasScrollArea.clientHeight / 2));
+  clampCanvasScroll("applyCanvasZoom");
+
+  updateZoomIndicator();
+  debugCanvasLog("zoom", {
+    from: previousZoom,
+    to: canvasZoom,
+    scrollLeft: canvasScrollArea.scrollLeft,
+    scrollTop: canvasScrollArea.scrollTop
+  });
+}
+
+function adjustCanvasZoom(stepDelta: number): void {
+  applyCanvasZoom(canvasZoom + stepDelta);
+}
+
+function initializeCanvasZoom(): void {
+  applyCanvasZoom(1);
+
+  canvasScrollArea.addEventListener("scroll", () => {
+    const maxLeft = Math.max(0, canvasScrollArea.scrollWidth - canvasScrollArea.clientWidth);
+    const maxTop = Math.max(0, canvasScrollArea.scrollHeight - canvasScrollArea.clientHeight);
+    const deltaLeft = canvasScrollArea.scrollLeft - lastCanvasScrollLeft;
+    const deltaTop = canvasScrollArea.scrollTop - lastCanvasScrollTop;
+
+    if (Math.abs(deltaLeft) > 120 || Math.abs(deltaTop) > 120) {
+      debugCanvasLog("scroll-jump", {
+        scrollLeft: canvasScrollArea.scrollLeft,
+        scrollTop: canvasScrollArea.scrollTop,
+        deltaLeft,
+        deltaTop,
+        maxLeft,
+        maxTop,
+        zoom: canvasZoom,
+        isSpacePanning,
+        isSpacePanReady
+      });
+
+      if (!isSpacePanning && deltaLeft > 120 && canvasScrollArea.scrollLeft >= (maxLeft - 1) && lastCanvasScrollLeft < (maxLeft - 2)) {
+        canvasScrollArea.scrollLeft = Math.max(0, lastCanvasScrollLeft);
+        debugCanvasLog("auto-unstick-right", {
+          restoredLeft: canvasScrollArea.scrollLeft,
+          previousLeft: lastCanvasScrollLeft,
+          maxLeft,
+          zoom: canvasZoom
+        });
+      }
+    }
+
+    if (canvasScrollArea.scrollLeft >= (maxLeft - 1) && maxLeft > 0) {
+      debugCanvasLog("at-right-edge", { scrollLeft: canvasScrollArea.scrollLeft, maxLeft, zoom: canvasZoom });
+    }
+
+    lastCanvasScrollLeft = canvasScrollArea.scrollLeft;
+    lastCanvasScrollTop = canvasScrollArea.scrollTop;
+  });
+
+  canvasScrollArea.addEventListener(
+    "wheel",
+    (event: WheelEvent) => {
+      if (!event.ctrlKey) {
+        return;
+      }
+
+      event.preventDefault();
+      const step = event.deltaY > 0 ? -CANVAS_ZOOM_STEP : CANVAS_ZOOM_STEP;
+      adjustCanvasZoom(step);
+    },
+    { passive: false }
+  );
+
+  document.addEventListener("keydown", (event: KeyboardEvent) => {
+    const targetTag = (event.target as HTMLElement | null)?.tagName?.toLowerCase();
+    if (targetTag === "textarea" || targetTag === "input") {
+      return;
+    }
+
+    if (!event.ctrlKey) {
+      return;
+    }
+
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      adjustCanvasZoom(CANVAS_ZOOM_STEP);
+      return;
+    }
+
+    if (event.key === "-") {
+      event.preventDefault();
+      adjustCanvasZoom(-CANVAS_ZOOM_STEP);
+      return;
+    }
+
+    if (event.key === "0") {
+      event.preventDefault();
+      applyCanvasZoom(1);
+    }
+  });
+}
+
+function initializeCanvasPan(): void {
+  const setSpacePanReady = (enabled: boolean): void => {
+    isSpacePanReady = enabled;
+    document.body.classList.toggle("space-pan-ready", enabled);
+  };
+
+  const stopPanning = (): void => {
+    if (!isSpacePanning) {
+      return;
+    }
+
+    isSpacePanning = false;
+    document.body.classList.remove("space-pan-active");
+  };
+
+  document.addEventListener("keydown", (event: KeyboardEvent) => {
+    const targetTag = (event.target as HTMLElement | null)?.tagName?.toLowerCase();
+    if (targetTag === "textarea" || targetTag === "input") {
+      return;
+    }
+
+    if (event.code !== "Space") {
+      return;
+    }
+
+    event.preventDefault();
+    if (!isSpacePanReady) {
+      setSpacePanReady(true);
+    }
+  });
+
+  document.addEventListener("keyup", (event: KeyboardEvent) => {
+    if (event.code !== "Space") {
+      return;
+    }
+
+    setSpacePanReady(false);
+    stopPanning();
+  });
+
+  canvasScrollArea.addEventListener("mousedown", (event: MouseEvent) => {
+    if (!isSpacePanReady || event.button !== 0) {
+      return;
+    }
+
+    isSpacePanning = true;
+    panStartClientX = event.clientX;
+    panStartClientY = event.clientY;
+    panStartScrollLeft = canvasScrollArea.scrollLeft;
+    panStartScrollTop = canvasScrollArea.scrollTop;
+    document.body.classList.add("space-pan-active");
+    event.preventDefault();
+  });
+
+  window.addEventListener("mousemove", (event: MouseEvent) => {
+    if (!isSpacePanning) {
+      return;
+    }
+
+    const deltaX = event.clientX - panStartClientX;
+    const deltaY = event.clientY - panStartClientY;
+    canvasScrollArea.scrollLeft = panStartScrollLeft - deltaX;
+    canvasScrollArea.scrollTop = panStartScrollTop - deltaY;
+    event.preventDefault();
+  });
+
+  window.addEventListener("mouseup", () => {
+    stopPanning();
+  });
+
+  window.addEventListener("blur", () => {
+    setSpacePanReady(false);
+    stopPanning();
+  });
+}
+
+function getShareSummary(): string {
+  return `Mini Sterling | ${sourceFileName} | Pagina ${currentPage}/${pageCount}`;
+}
+
 function initializePagesSidebarControls(): void {
   const minWidth = 96;
   const maxWidth = 260;
@@ -207,6 +489,46 @@ function isArrayBufferLike(value: unknown): value is ArrayBuffer {
   return value instanceof ArrayBuffer;
 }
 
+function tryToArrayBuffer(value: unknown): ArrayBuffer | null {
+  if (value instanceof ArrayBuffer) {
+    return value;
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    const view = value as Uint8Array;
+    const copied = new Uint8Array(view.byteLength);
+    copied.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+    return copied.buffer;
+  }
+
+  if (Array.isArray(value) && value.every((item) => typeof item === "number")) {
+    return new Uint8Array(value as number[]).buffer;
+  }
+
+  if (value && typeof value === "object") {
+    const asRecord = value as Record<string, unknown>;
+
+    if (Array.isArray(asRecord.data) && asRecord.data.every((item) => typeof item === "number")) {
+      return new Uint8Array(asRecord.data as number[]).buffer;
+    }
+
+    if (typeof asRecord.length === "number" && Number.isFinite(asRecord.length)) {
+      const size = Math.max(0, Math.floor(asRecord.length));
+      const maybeArrayLike = Array.from({ length: size }, (_, index) => asRecord[String(index)]);
+      if (maybeArrayLike.every((item) => typeof item === "number")) {
+        return new Uint8Array(maybeArrayLike as number[]).buffer;
+      }
+    }
+
+    const numeric = Object.values(asRecord);
+    if (numeric.length > 0 && numeric.every((item) => typeof item === "number")) {
+      return new Uint8Array(numeric as number[]).buffer;
+    }
+  }
+
+  return null;
+}
+
 function cloneArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
   const bytes = new Uint8Array(buffer);
   const copy = new Uint8Array(bytes.byteLength);
@@ -223,30 +545,42 @@ function getSourcePdfBufferCopy(): ArrayBuffer {
 }
 
 function normalizePdfBinary(value: unknown): ArrayBuffer {
-  if (isArrayBufferLike(value)) {
-    return value;
-  }
-
-  if (ArrayBuffer.isView(value)) {
-    const view = value as Uint8Array;
-    const copied = new Uint8Array(view.byteLength);
-    copied.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
-    return copied.buffer;
+  const direct = tryToArrayBuffer(value);
+  if (direct) {
+    return direct;
   }
 
   if (value && typeof value === "object") {
     const asRecord = value as Record<string, unknown>;
-    if (Array.isArray(asRecord.data)) {
-      return new Uint8Array(asRecord.data as number[]).buffer;
-    }
+    const nestedCandidates = [
+      asRecord.arrayBuffer,
+      asRecord.buffer,
+      asRecord.data,
+      asRecord.payload,
+      asRecord.pdf,
+      asRecord.binary,
+      asRecord.bytes,
+      asRecord.value
+    ];
 
-    const numeric = Object.values(asRecord);
-    if (numeric.length > 0 && numeric.every((item) => typeof item === "number")) {
-      return new Uint8Array(numeric as number[]).buffer;
+    for (const candidate of nestedCandidates) {
+      const normalized = tryToArrayBuffer(candidate);
+      if (normalized) {
+        return normalized;
+      }
+
+      if (candidate && typeof candidate === "object") {
+        const deep = candidate as Record<string, unknown>;
+        const deepNormalized = tryToArrayBuffer(deep.data ?? deep.buffer ?? deep.arrayBuffer ?? deep.value);
+        if (deepNormalized) {
+          return deepNormalized;
+        }
+      }
     }
   }
 
-  throw new Error("Invalid PDF binary data: either TypedArray, string, or array-like object is expected in the data property.");
+  const kind = Object.prototype.toString.call(value);
+  throw new Error(`Datos PDF invalidos recibidos (tipo: ${kind}).`);
 }
 
 function toggleToolTab(tab: "stamps" | "ai"): void {
@@ -300,6 +634,7 @@ function renderStampLibrary(): void {
       btn.className = "stamp-item";
       btn.setAttribute("role", "button");
       btn.tabIndex = 0;
+      btn.draggable = true;
 
       const img = document.createElement("img");
       img.src = item.dataUrl;
@@ -339,9 +674,310 @@ function renderStampLibrary(): void {
           setStatus(`Sello aplicado: ${item.name}`);
         }
       });
+      btn.addEventListener("dragstart", (event: DragEvent) => {
+        draggingStampId = item.id;
+        btn.classList.add("is-dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData("text/plain", item.id);
+        }
+      });
+      btn.addEventListener("dragend", () => {
+        draggingStampId = null;
+        btn.classList.remove("is-dragging");
+        canvasStackEl.classList.remove("drop-ready");
+      });
 
       stampLibraryEl.appendChild(btn);
     });
+}
+
+async function upsertStampFromFile(file: File, applyAfterImport: boolean): Promise<boolean> {
+  if (!file.type.startsWith("image/")) {
+    return false;
+  }
+
+  const buffer = await file.arrayBuffer();
+  const dataUrl = bufferToDataUrl(buffer, file.type || "image/png");
+  const existing = Array.from(stampLibrary.values()).find((entry) => entry.dataUrl === dataUrl);
+  if (existing) {
+    if (applyAfterImport) {
+      await overlay.addStampImage(existing.dataUrl, existing.id);
+    }
+    return false;
+  }
+
+  const id = crypto.randomUUID();
+  stampLibrary.set(id, {
+    id,
+    name: file.name,
+    mimeType: file.type || "image/png",
+    dataUrl,
+    bytes: Array.from(new Uint8Array(buffer)),
+    createdAt: Date.now()
+  });
+
+  if (applyAfterImport) {
+    await overlay.addStampImage(dataUrl, id);
+  }
+
+  return true;
+}
+
+async function upsertStampFromDataUrl(name: string, mimeType: string, dataUrl: string, applyAfterImport: boolean): Promise<boolean> {
+  if (!dataUrl.startsWith("data:image/")) {
+    return false;
+  }
+
+  const existing = Array.from(stampLibrary.values()).find((entry) => entry.dataUrl === dataUrl);
+  if (existing) {
+    if (applyAfterImport) {
+      await overlay.addStampImage(existing.dataUrl, existing.id);
+    }
+    return false;
+  }
+
+  const payload = dataUrl.split(",")[1] ?? "";
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const id = crypto.randomUUID();
+  stampLibrary.set(id, {
+    id,
+    name,
+    mimeType,
+    dataUrl,
+    bytes: Array.from(bytes),
+    createdAt: Date.now()
+  });
+
+  if (applyAfterImport) {
+    await overlay.addStampImage(dataUrl, id);
+  }
+
+  return true;
+}
+
+async function detectEditableTextOnCurrentPage(): Promise<void> {
+  if (!sourcePdfBuffer) {
+    setStatus("Carga un PDF antes de editar texto.");
+    return;
+  }
+
+  const blocks = await renderer.extractPageTextBlocks(currentPage, renderScale);
+  if (blocks.length === 0) {
+    setStatus("No se detecto texto editable en esta pagina.");
+    return;
+  }
+
+  const normalized: PageTextBlock[] = blocks
+    .map((block) => ({
+      ...block,
+      width: Math.min(pdfCanvas.width - block.x, Math.max(20, block.width))
+    }))
+    .filter((block) => block.width > 0 && block.y < pdfCanvas.height);
+
+  const added = overlay.addDetectedTextBlocks(normalized);
+  await persistCurrentPageOverlay();
+
+  if (added > 0) {
+    setStatus(`Analisis completado en pagina ${currentPage}: ${added} bloque(s) editable(s). Doble clic para editar.`);
+  } else {
+    setStatus("El texto de esta pagina ya estaba listo para editar.");
+  }
+}
+
+async function buildFlattenedPdfBlob(requireOverlayContent: boolean): Promise<Blob | null> {
+  if (!sourcePdfBuffer) {
+    return null;
+  }
+
+  await persistCurrentPageOverlay();
+
+  const allPlacements: StampPlacement[] = [];
+  const allTextPlacements: TextPlacement[] = [];
+  pageOverlayState.forEach((serialized, pageNumber) => {
+    allPlacements.push(...collectPlacementsFromSerialized(serialized, pageNumber - 1));
+    allTextPlacements.push(...collectTextPlacementsFromSerialized(serialized, pageNumber - 1));
+  });
+
+  const hasOverlayContent = allPlacements.length > 0 || allTextPlacements.length > 0;
+  if (requireOverlayContent && !hasOverlayContent) {
+    setStatus("No hay imagenes ni textos colocados para exportar.");
+    return null;
+  }
+
+  if (!hasOverlayContent) {
+    return new Blob([getSourcePdfBufferCopy()], { type: "application/pdf" });
+  }
+
+  const stampAssets = Array.from(stampLibrary.values()).reduce<Record<string, { bytes: Uint8Array; mimeType: string }>>((acc, item) => {
+    acc[item.id] = {
+      bytes: new Uint8Array(item.bytes),
+      mimeType: item.mimeType
+    };
+    return acc;
+  }, {});
+
+  return flattenService.exportDocument({
+    sourcePdfBuffer: getSourcePdfBufferCopy(),
+    placements: allPlacements,
+    stampAssets,
+    textPlacements: allTextPlacements,
+    renderScale
+  });
+}
+
+async function compressCurrentPdf(): Promise<void> {
+  if (!sourcePdfBuffer) {
+    setStatus("No hay PDF cargado para comprimir.");
+    return;
+  }
+
+  setStatus("Comprimiendo PDF...");
+
+  const baseBlob = await buildFlattenedPdfBlob(false);
+  if (!baseBlob) {
+    setStatus("No fue posible preparar el PDF para compresion.");
+    return;
+  }
+
+  const originalBuffer = getSourcePdfBufferCopy();
+  const preparedBytes = new Uint8Array(await baseBlob.arrayBuffer());
+  const preparedDoc = await PDFDocument.load(preparedBytes);
+  const compressedBytes = await preparedDoc.save({ useObjectStreams: true, addDefaultPage: false });
+
+  const finalFileName = normalizeExportFileName(`${getSuggestedExportName().replace(/\.pdf$/i, "")}_comprimido`);
+  const compressedBlob = new Blob([new Uint8Array(compressedBytes)], { type: "application/pdf" });
+
+  const downloadUrl = URL.createObjectURL(compressedBlob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = finalFileName;
+  link.click();
+  URL.revokeObjectURL(downloadUrl);
+
+  const deltaKb = Math.round((originalBuffer.byteLength - compressedBlob.size) / 1024);
+  const summary = deltaKb > 0
+    ? `PDF comprimido y descargado (${deltaKb} KB menos).`
+    : "PDF comprimido y descargado.";
+  setStatus(summary);
+}
+
+async function handleStampFiles(fileList: FileList | File[]): Promise<void> {
+  const files = Array.from(fileList);
+  if (files.length === 0) {
+    return;
+  }
+
+  let added = 0;
+  let reused = 0;
+  let firstApplied = false;
+
+  for (const file of files) {
+    const imported = await upsertStampFromFile(file, !firstApplied);
+    if (imported) {
+      added += 1;
+      if (!firstApplied) {
+        firstApplied = true;
+      }
+    } else {
+      reused += 1;
+    }
+  }
+
+  await saveStampLibrary();
+  renderStampLibrary();
+
+  if (added > 0) {
+    setStatus(`Importacion completada: ${added} sello(s) nuevo(s).`);
+  } else if (reused > 0) {
+    setStatus("Esas imagenes ya existian en tu biblioteca de sellos.");
+  }
+}
+
+function initializeStampDropzone(): void {
+  const openPicker = (): void => {
+    stampUploadInput.click();
+  };
+
+  stampDropzone.addEventListener("click", openPicker);
+  stampDropzone.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openPicker();
+    }
+  });
+
+  stampDropzone.addEventListener("dragover", (event: DragEvent) => {
+    event.preventDefault();
+    stampDropzone.classList.add("dragover");
+  });
+
+  stampDropzone.addEventListener("dragleave", () => {
+    stampDropzone.classList.remove("dragover");
+  });
+
+  stampDropzone.addEventListener("drop", (event: DragEvent) => {
+    event.preventDefault();
+    stampDropzone.classList.remove("dragover");
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    void handleStampFiles(files);
+  });
+}
+
+function initializeCanvasStampDrop(): void {
+  canvasStackEl.addEventListener("dragover", (event: DragEvent) => {
+    const payload = draggingStampId || event.dataTransfer?.getData("text/plain");
+    if (!payload) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    canvasStackEl.classList.add("drop-ready");
+  });
+
+  canvasStackEl.addEventListener("dragleave", () => {
+    canvasStackEl.classList.remove("drop-ready");
+  });
+
+  canvasStackEl.addEventListener("drop", (event: DragEvent) => {
+    const payload = draggingStampId || event.dataTransfer?.getData("text/plain");
+    if (!payload) {
+      return;
+    }
+
+    event.preventDefault();
+    canvasStackEl.classList.remove("drop-ready");
+
+    const stamp = stampLibrary.get(payload);
+    if (!stamp) {
+      return;
+    }
+
+    const rect = pdfCanvas.getBoundingClientRect();
+    const clientX = event.clientX;
+    const clientY = event.clientY;
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      return;
+    }
+
+    const x = (clientX - rect.left) * (pdfCanvas.width / rect.width);
+    const y = (clientY - rect.top) * (pdfCanvas.height / rect.height);
+    void overlay.addStampImageAt(stamp.dataUrl, stamp.id, x, y);
+    setStatus(`Sello colocado: ${stamp.name}`);
+  });
 }
 
 async function removeStampFromLibrary(stampId: string): Promise<void> {
@@ -385,7 +1021,36 @@ async function removeStampFromLibrary(stampId: string): Promise<void> {
 }
 
 function updatePageIndicator(): void {
+  if (!sourcePdfBuffer) {
+    pageIndicatorEl.textContent = "Sin PDF";
+    pagesTitleEl.textContent = "Pages";
+    return;
+  }
+
   pageIndicatorEl.textContent = `Pagina ${currentPage} / ${pageCount}`;
+  pagesTitleEl.textContent = `Pages (${pageCount})`;
+}
+
+function createImportPdfCard(): HTMLButtonElement {
+  const importCard = document.createElement("button");
+  importCard.type = "button";
+  importCard.className = "page-import-card";
+  importCard.innerHTML = "<span class=\"material-symbols-outlined\">upload_file</span><span>Importar PDF<br/>- - - -</span>";
+  importCard.addEventListener("click", () => {
+    mergeInput.click();
+  });
+  return importCard;
+}
+
+function renderEmptyPageList(): void {
+  pageListEl.innerHTML = "";
+
+  const hint = document.createElement("p");
+  hint.className = "page-empty-hint";
+  hint.textContent = "No hay PDF cargado.";
+  pageListEl.appendChild(hint);
+
+  pageListEl.appendChild(createImportPdfCard());
 }
 
 function collectPlacementsFromSerialized(serialized: Record<string, unknown>, pageIndex: number): StampPlacement[] {
@@ -459,6 +1124,11 @@ function collectTextPlacementsFromSerialized(serialized: Record<string, unknown>
 }
 
 async function renderPageThumbs(): Promise<void> {
+  if (!sourcePdfBuffer) {
+    renderEmptyPageList();
+    return;
+  }
+
   pageListEl.innerHTML = "";
 
   const thumbnailJobs: Promise<void>[] = [];
@@ -540,6 +1210,8 @@ async function renderPageThumbs(): Promise<void> {
     pageListEl.appendChild(item);
   }
 
+  pageListEl.appendChild(createImportPdfCard());
+
   await Promise.allSettled(thumbnailJobs);
 }
 
@@ -552,6 +1224,17 @@ async function renderCurrentPage(): Promise<void> {
   overlay.resize(result.width, result.height);
   const pageJson = pageOverlayState.get(currentPage) ?? null;
   await overlay.load(pageJson);
+  requestAnimationFrame(() => {
+    clampCanvasScroll("renderCurrentPage");
+    debugCanvasLog("render-page", {
+      page: currentPage,
+      width: result.width,
+      height: result.height,
+      zoom: canvasZoom,
+      scrollLeft: canvasScrollArea.scrollLeft,
+      scrollTop: canvasScrollArea.scrollTop
+    });
+  });
   updatePageIndicator();
   void renderPageThumbs();
 }
@@ -564,6 +1247,9 @@ async function goToPage(nextPage: number): Promise<void> {
   await persistCurrentPageOverlay();
   currentPage = nextPage;
   await renderCurrentPage();
+  if (textEditModeEnabled) {
+    await detectEditableTextOnCurrentPage();
+  }
 }
 
 async function deletePage(pageToDelete: number): Promise<void> {
@@ -617,9 +1303,50 @@ function getSessionId(): string | null {
   return params.get("sessionId");
 }
 
+async function consumePendingWorkspaceAction(sessionId: string): Promise<PendingWorkspaceAction | null> {
+  const stored = await chrome.storage.local.get([WORKSPACE_PENDING_ACTION_KEY]);
+  const action = (stored[WORKSPACE_PENDING_ACTION_KEY] as PendingWorkspaceAction | undefined) ?? null;
+  if (!action || action.sessionId !== sessionId) {
+    return null;
+  }
+
+  await chrome.storage.local.remove(WORKSPACE_PENDING_ACTION_KEY);
+  return action;
+}
+
+async function applyPendingWorkspaceAction(action: PendingWorkspaceAction): Promise<void> {
+  if (action.mode === "add-image") {
+    toggleToolTab("stamps");
+
+    if (!action.imageDataUrl) {
+      setStatus("No se recibio imagen para agregar.");
+      return;
+    }
+
+    const imported = await upsertStampFromDataUrl(action.imageName ?? "imagen_importada", "image/png", action.imageDataUrl, true);
+    await saveStampLibrary();
+    renderStampLibrary();
+
+    if (imported) {
+      setStatus("Imagen importada y aplicada. Puedes arrastrarla o editarla.");
+    } else {
+      setStatus("La imagen ya existia en la biblioteca y fue aplicada.");
+    }
+    return;
+  }
+
+  if (action.mode === "edit-text") {
+    textEditModeEnabled = true;
+    await detectEditableTextOnCurrentPage();
+  }
+}
+
 async function loadSessionPdf(): Promise<void> {
   const sessionId = getSessionId();
   if (!sessionId) {
+    renderA4Placeholder();
+    void renderPageThumbs();
+    updatePageIndicator();
     setStatus("Sesion invalida: falta sessionId.");
     return;
   }
@@ -632,6 +1359,9 @@ async function loadSessionPdf(): Promise<void> {
   setStatus("Cargando PDF de sesion...");
   const response = await chrome.runtime.sendMessage(req) as GetSessionDataResponse;
   if (!response.ok || !response.arrayBuffer) {
+    renderA4Placeholder();
+    void renderPageThumbs();
+    updatePageIndicator();
     setStatus(response.error ?? "No se pudo recuperar el PDF.");
     return;
   }
@@ -646,7 +1376,15 @@ async function loadSessionPdf(): Promise<void> {
     await renderCurrentPage();
     updateDocumentMeta();
     setStatus(`Documento cargado: ${sourceFileName}.`);
+
+    const pendingAction = await consumePendingWorkspaceAction(sessionId);
+    if (pendingAction) {
+      await applyPendingWorkspaceAction(pendingAction);
+    }
   } catch (error) {
+    renderA4Placeholder();
+    void renderPageThumbs();
+    updatePageIndicator();
     const message = error instanceof Error ? error.message : "No se pudo abrir el PDF.";
     setStatus(message);
   }
@@ -667,37 +1405,6 @@ function bufferToDataUrl(buffer: ArrayBuffer, mimeType: string): string {
     binary += String.fromCharCode(value);
   });
   return `data:${mimeType};base64,${btoa(binary)}`;
-}
-
-async function handleStampUpload(): Promise<void> {
-  const file = stampUploadInput.files?.[0];
-  if (!file) {
-    return;
-  }
-
-  const buffer = await file.arrayBuffer();
-  const id = crypto.randomUUID();
-  const item: StampLibraryItem = {
-    id,
-    name: file.name,
-    mimeType: file.type || "image/png",
-    dataUrl: bufferToDataUrl(buffer, file.type || "image/png"),
-    bytes: Array.from(new Uint8Array(buffer)),
-    createdAt: Date.now()
-  };
-
-  const existing = Array.from(stampLibrary.values()).find((entry) => entry.dataUrl === item.dataUrl);
-  if (existing) {
-    await overlay.addStampImage(existing.dataUrl, existing.id);
-    setStatus("Esta imagen ya existe en tu biblioteca local. Se reutilizo el sello.");
-    return;
-  }
-
-  stampLibrary.set(id, item);
-  await saveStampLibrary();
-  renderStampLibrary();
-  await overlay.addStampImage(item.dataUrl, item.id);
-  setStatus("Imagen guardada en biblioteca local y aplicada en la pagina actual.");
 }
 
 async function mergeAdditionalPdfs(files: FileList): Promise<void> {
@@ -750,38 +1457,18 @@ exportBtn.addEventListener("click", async () => {
 
   setStatus("Aplanando anotaciones en el PDF...");
 
-  await persistCurrentPageOverlay();
-  const allPlacements: StampPlacement[] = [];
-  const allTextPlacements: TextPlacement[] = [];
-  pageOverlayState.forEach((serialized, pageNumber) => {
-    allPlacements.push(...collectPlacementsFromSerialized(serialized, pageNumber - 1));
-    allTextPlacements.push(...collectTextPlacementsFromSerialized(serialized, pageNumber - 1));
-  });
-
-  const stampAssets = Array.from(stampLibrary.values()).reduce<Record<string, { bytes: Uint8Array; mimeType: string }>>((acc, item) => {
-    acc[item.id] = {
-      bytes: new Uint8Array(item.bytes),
-      mimeType: item.mimeType
-    };
-    return acc;
-  }, {});
-
-  if (allPlacements.length === 0 && allTextPlacements.length === 0) {
-    setStatus("No hay imagenes ni textos colocados para exportar.");
+  const blob = await buildFlattenedPdfBlob(true);
+  if (!blob) {
     return;
   }
-
-  const blob = await flattenService.exportDocument({
-    sourcePdfBuffer: getSourcePdfBufferCopy(),
-    placements: allPlacements,
-    stampAssets,
-    textPlacements: allTextPlacements,
-    renderScale
-  });
 
   pendingExportBlob = blob;
   openExportNamePopover();
   setStatus("Define el nombre de exportacion y confirma.");
+});
+
+compressBtn.addEventListener("click", () => {
+  void compressCurrentPdf();
 });
 
 exportCancelBtn.addEventListener("click", () => {
@@ -888,12 +1575,28 @@ mergeBtn.addEventListener("click", () => {
 });
 
 addImageBtn.addEventListener("click", () => {
+  toggleToolTab("stamps");
   stampUploadInput.click();
 });
 
 addTextBtn.addEventListener("click", () => {
-  overlay.addText("Nuevo texto");
-  setStatus("Texto agregado. Haz doble clic para editar contenido.");
+  void (async () => {
+    overlay.addText("Nuevo texto");
+    await persistCurrentPageOverlay();
+    setStatus("Texto agregado. Doble clic para editar contenido.");
+  })();
+});
+
+editTextBtn.addEventListener("click", () => {
+  void (async () => {
+    textEditModeEnabled = true;
+    await detectEditableTextOnCurrentPage();
+  })();
+});
+
+deleteObjectBtn.addEventListener("click", () => {
+  const removed = overlay.removeActiveObject();
+  setStatus(removed ? "Elemento eliminado." : "Selecciona una imagen o texto para eliminar.");
 });
 
 mergeInput.addEventListener("change", () => {
@@ -908,7 +1611,11 @@ uploadStampBtn.addEventListener("click", () => {
 });
 
 stampUploadInput.addEventListener("change", () => {
-  void handleStampUpload();
+  const files = stampUploadInput.files;
+  if (files && files.length > 0) {
+    void handleStampFiles(files);
+  }
+  stampUploadInput.value = "";
 });
 
 questionInput.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -953,9 +1660,16 @@ document.addEventListener("keydown", (event: KeyboardEvent) => {
 
 appendAiMessage("bot", "Hola, soy tu asistente IA. Puedo ayudarte a resumir y analizar este PDF.");
 
+renderA4Placeholder();
 initializePagesSidebarControls();
+initializeStampDropzone();
+initializeCanvasStampDrop();
+initializeCanvasZoom();
+initializeCanvasPan();
 closeExportNamePopover(true);
 updateDocumentMeta();
+void renderPageThumbs();
+updatePageIndicator();
 void loadStampLibrary();
 
 void loadSessionPdf();

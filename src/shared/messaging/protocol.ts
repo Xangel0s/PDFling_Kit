@@ -6,7 +6,7 @@ export interface OpenWorkspaceRequest {
   type: "OPEN_WORKSPACE";
   payload: {
     fileName: string;
-    arrayBuffer: ArrayBuffer;
+    arrayBuffer: ArrayBuffer | { data: number[] } | number[] | Record<string, unknown>;
   };
 }
 
@@ -27,7 +27,7 @@ export interface GetSessionDataRequest {
 export interface GetSessionDataResponse {
   ok: boolean;
   fileName?: string;
-  arrayBuffer?: ArrayBuffer;
+  arrayBuffer?: ArrayBuffer | { data: number[] } | number[] | Record<string, unknown>;
   error?: string;
 }
 

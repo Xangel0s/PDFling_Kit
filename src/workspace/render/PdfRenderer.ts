@@ -9,6 +9,15 @@ export interface RenderResult {
   pageCount: number;
 }
 
+export interface PageTextBlock {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+}
+
 export class PdfRenderer {
   private pdfDoc: any = null;
 
@@ -83,5 +92,40 @@ export class PdfRenderer {
 
     await page.render({ canvasContext: thumbCtx, viewport }).promise;
     return thumbCanvas.toDataURL("image/png");
+  }
+
+  async extractPageTextBlocks(pageNumber: number, scale: number): Promise<PageTextBlock[]> {
+    if (!this.pdfDoc) {
+      throw new Error("No hay un documento cargado.");
+    }
+
+    const page = await this.pdfDoc.getPage(pageNumber);
+    const viewport = page.getViewport({ scale });
+    const text = await page.getTextContent();
+
+    return text.items
+      .map((item: any) => {
+        const raw = typeof item.str === "string" ? item.str.trim() : "";
+        if (!raw) {
+          return null;
+        }
+
+        const transformed = pdfjsLib.Util.transform(viewport.transform, item.transform) as number[];
+        const fontHeight = Math.max(8, Math.abs(Number(transformed[3] ?? 0)));
+        const width = Math.max(8, Number(item.width ?? raw.length * fontHeight * 0.45) * viewport.scale);
+        const x = Number(transformed[4] ?? 0);
+        const baselineY = Number(transformed[5] ?? 0);
+        const y = baselineY - fontHeight;
+
+        return {
+          text: raw,
+          x,
+          y,
+          width,
+          height: fontHeight,
+          fontSize: Math.max(10, fontHeight)
+        } satisfies PageTextBlock;
+      })
+      .filter((item: PageTextBlock | null): item is PageTextBlock => Boolean(item));
   }
 }

@@ -14,36 +14,24 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="brand" aria-label="Marca">
-        <div class="brand-row">
-          <span class="material-symbols-outlined brand-icon">description</span>
-          <h1>Sterling</h1>
+      <div class="topbar-left">
+        <div class="brand" aria-label="Marca">
+          <div class="brand-row">
+            <span class="material-symbols-outlined brand-icon">auto_awesome</span>
+            <h1>Sterling</h1>
+          </div>
         </div>
         <div id="doc-meta" class="doc-meta">
+          <span class="doc-chip-label">FILE:</span>
           <span id="doc-name">Documento activo</span>
+          <span class="doc-chip-sep">|</span>
           <span id="doc-stats">0 paginas</span>
         </div>
       </div>
 
-      <div class="actions">
-        <input id="merge-input" class="hidden-input" type="file" accept="application/pdf" multiple />
-        <button id="merge-btn" type="button" class="tool-btn" title="Unir PDFs">
-          <span class="material-symbols-outlined">attachment</span>
-          <span>Unir PDFs</span>
-        </button>
-        <button id="add-image-btn" type="button" class="tool-btn" title="Agregar Imagen">
-          <span class="material-symbols-outlined">image</span>
-          <span>Agregar Imagen</span>
-        </button>
-        <button id="add-text-btn" type="button" class="tool-btn" title="Agregar Texto">
-          <span class="material-symbols-outlined">text_fields</span>
-          <span>Agregar Texto</span>
-        </button>
-      </div>
-
       <div class="topbar-primary-action">
+        <button id="compress-btn" type="button" class="share-btn">Comprimir</button>
         <button id="export-btn" type="button" class="export-btn">
-          <span class="material-symbols-outlined">download</span>
           <span>Exportar</span>
         </button>
         <div id="export-name-popover" class="export-name-popover" hidden>
@@ -60,7 +48,7 @@
     <main class="workspace-layout">
       <aside class="pages-panel">
         <div class="pages-panel-head">
-          <h2>Paginas</h2>
+          <h2 id="pages-title">Pages</h2>
           <button id="toggle-pages-btn" type="button" class="pages-toggle-btn" title="Colapsar barra de paginas">
             <span class="material-symbols-outlined">left_panel_close</span>
           </button>
@@ -70,42 +58,70 @@
       </aside>
 
       <section class="canvas-panel">
-        <div class="viewer-toolbar">
-          <button id="prev-page-btn" type="button" class="ghost-btn">Anterior</button>
-          <span id="page-indicator">Pagina 1 / 1</span>
-          <button id="next-page-btn" type="button" class="ghost-btn">Siguiente</button>
+        <input id="merge-input" class="hidden-input" type="file" accept="application/pdf" multiple />
+        <div class="center-controls">
+          <div class="floating-tools">
+            <button id="merge-btn" type="button" class="floating-tool-btn" title="Unir PDFs" data-tooltip="Unir PDFs">
+              <span class="material-symbols-outlined">layers</span>
+            </button>
+            <button id="add-image-btn" type="button" class="floating-tool-btn" title="Agregar Imagen" data-tooltip="Agregar Imagen">
+              <span class="material-symbols-outlined">image</span>
+            </button>
+            <button id="edit-text-btn" type="button" class="floating-tool-btn" title="Editar Texto" data-tooltip="Editar Texto">
+              <span class="material-symbols-outlined">ink_pen</span>
+            </button>
+            <button id="add-text-btn" type="button" class="floating-tool-btn" title="Agregar Texto" data-tooltip="Agregar Texto">
+              <span class="material-symbols-outlined">text_fields</span>
+            </button>
+            <button id="delete-object-btn" type="button" class="floating-tool-btn danger" title="Eliminar Seleccion" data-tooltip="Eliminar Seleccion">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </div>
+          <div class="viewer-toolbar">
+            <button id="prev-page-btn" type="button" class="ghost-btn">Anterior</button>
+            <span id="page-indicator">Pagina 1 / 1</span>
+            <span id="zoom-indicator" class="zoom-indicator" title="Zoom del lienzo">100%</span>
+            <button id="next-page-btn" type="button" class="ghost-btn">Siguiente</button>
+          </div>
         </div>
-        <div class="canvas-center-wrap">
-          <div class="canvas-stack">
-            <canvas id="pdf-canvas"></canvas>
-            <canvas id="overlay-canvas"></canvas>
+        <div class="canvas-scroll-area">
+          <div class="canvas-center-wrap">
+            <div id="canvas-stack" class="canvas-stack">
+              <canvas id="pdf-canvas" width="595" height="842"></canvas>
+              <canvas id="overlay-canvas" width="595" height="842"></canvas>
+            </div>
           </div>
         </div>
       </section>
 
       <aside class="tools-panel">
         <div class="tool-tabs">
-          <button id="tab-stamps" class="tab-btn active" type="button">Sellos Frecuentes</button>
-          <button id="tab-ai" class="tab-btn" type="button">IA Chat</button>
+          <button id="tab-ai" class="tab-btn active" type="button">AI Assistant</button>
+          <button id="tab-stamps" class="tab-btn" type="button">Sellos</button>
         </div>
 
-        <section id="stamps-panel" class="tool-panel active">
+        <section id="ai-panel" class="tool-panel active">
           <p class="panel-hint">Arrastra al documento para aplicar.</p>
-          <input id="stamp-upload-input" class="hidden-input" type="file" accept="image/png,image/jpeg" />
-          <button id="upload-stamp-btn" class="ghost-btn full-btn" type="button">Subir Imagen/Sello</button>
-          <div id="stamp-library" class="stamp-library"></div>
-        </section>
-
-        <section id="ai-panel" class="tool-panel">
           <div class="ai-tools">
             <button id="summarize-ai-btn" type="button" class="ai-quick-btn">Resumir PDF</button>
-            <button id="clear-ai-btn" type="button" class="ai-quick-btn ghost">Limpiar chat</button>
+            <button id="clear-ai-btn" type="button" class="ai-quick-btn ghost">Limpiar</button>
           </div>
           <div id="ai-messages" class="ai-messages"></div>
           <div class="ai-input-row">
-            <textarea id="question-input" placeholder="Escribe tu pregunta..."></textarea>
-            <button id="ask-ai-btn" type="button">Preguntar</button>
+            <textarea id="question-input" placeholder="Ask anything..."></textarea>
+            <button id="ask-ai-btn" type="button">Enviar</button>
           </div>
+        </section>
+
+        <section id="stamps-panel" class="tool-panel">
+          <p class="panel-hint">Importa imagenes y haz clic para aplicarlas en el PDF.</p>
+          <input id="stamp-upload-input" class="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" multiple />
+          <button id="upload-stamp-btn" class="ghost-btn full-btn" type="button">Importar Imagenes</button>
+          <div id="stamp-dropzone" class="stamp-dropzone" role="button" tabindex="0" aria-label="Importar sellos">
+            <span class="material-symbols-outlined">upload_file</span>
+            <span>Arrastra imagenes aqui o haz clic para importar</span>
+          </div>
+          <div id="stamp-library" class="stamp-library"></div>
         </section>
       </aside>
     </main>
