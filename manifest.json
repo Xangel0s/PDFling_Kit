@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Mini Sterling",
+  "version": "0.1.0",
+  "description": "Procesa PDFs 100% en local para unir, firmar y consultar IA.",
+  "permissions": ["storage", "tabs", "scripting"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Mini Sterling"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["pdf.worker.min.mjs"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*"
+  }
+}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Sterling</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="welcome-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+      <div id="welcome-shell" class="welcome-shell">
+        <div id="welcome-card" class="modal-card">
+          <h2 id="welcome-title">Bienvenido a Mini Sterling</h2>
+          <p class="modal-subtitle">Tu extension para procesar PDF 100% local y privado.</p>
+
+          <div class="feature-list">
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">PDF</span>
+              <div>
+                <h3>Unir y organizar archivos</h3>
+                <p>Ejemplo: combina contrato y anexo en un solo PDF.</p>
+              </div>
+            </article>
+
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">SIG</span>
+              <div>
+                <h3>Firmar y sellar visualmente</h3>
+                <p>Ejemplo: sube tu firma y arrastrala al lugar correcto.</p>
+              </div>
+            </article>
+
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">AI</span>
+              <div>
+                <h3>Preguntar al asistente</h3>
+                <p>Ejemplo: "Resume este documento en 5 puntos".</p>
+              </div>
+            </article>
+          </div>
+
+          <section class="terms-box">
+            <h3>Terminos y condiciones</h3>
+            <p>
+              Aceptas el uso local de archivos y el envio de texto al endpoint corporativo
+              de IA solo cuando hagas una consulta.
+            </p>
+            <label class="terms-check">
+              <input id="terms-checkbox" type="checkbox" />
+              Acepto terminos y condiciones.
+            </label>
+          </section>
+
+          <button id="welcome-done" type="button" disabled>Listo!</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="container">
+      <header class="topbar">
+        <h1>Mini Sterling</h1>
+        <div class="top-icons">
+          <button id="settings-btn" type="button" class="icon-btn" aria-label="Ajustes">⚙</button>
+          <button id="expand-btn" type="button" class="icon-btn" aria-label="Expandir">↗</button>
+        </div>
+      </header>
+
+      <section id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Seleccionar PDF">
+        <div class="drop-icon" aria-hidden="true">⇪</div>
+        <p class="drop-title">Arrastra un PDF aqui o haz clic</p>
+        <p class="drop-sub">Soporta archivos hasta 50MB</p>
+      </section>
+
+      <input id="pdf-input" class="hidden-input" type="file" accept="application/pdf" />
+      <button id="open-workspace" type="button" class="hidden-action">Abrir Mesa de Trabajo</button>
+
+      <section class="actions-grid">
+        <button id="action-merge" type="button" class="action-card">
+          <span class="action-icon">▦</span>
+          <span>Unir PDFs</span>
+        </button>
+        <button id="action-sign" type="button" class="action-card">
+          <span class="action-icon">✎</span>
+          <span>Firmar/Sellar</span>
+        </button>
+        <button id="action-ask" type="button" class="action-card">
+          <span class="action-icon">✧</span>
+          <span>Preguntar a IA</span>
+        </button>
+      </section>
+
+      <section class="assistant-card">
+        <div class="assistant-title">Asistente IA</div>
+        <div id="assistant-body" class="assistant-body">
+          <div class="assistant-row assistant-row-bot">
+            <span class="bot-dot" aria-hidden="true">◉</span>
+            <p>iHola! Soy tu asistente Sterling. Puedo revisar la pestana actual y detectar PDFs en tus pestanas.</p>
+          </div>
+        </div>
+        <div class="assistant-input-row">
+          <textarea id="assistant-question" placeholder="Escribe tu pregunta..."></textarea>
+          <button id="send-question" type="button" class="send-btn" aria-label="Enviar">➤</button>
+        </div>
+      </section>
+
+      <p id="status" aria-live="polite"></p>
+    </main>
+
+    <div id="settings-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-card">
+        <h2 id="settings-title">Configuracion IA</h2>
+        <label class="settings-field">
+          <span>Endpoint IA</span>
+          <input id="ai-endpoint" type="url" placeholder="https://api.company.example/mini-sterling/chat" />
+        </label>
+        <label class="settings-field">
+          <span>API Key</span>
+          <input id="ai-apikey" type="password" placeholder="Ingresa tu API key" />
+        </label>
+        <div class="settings-actions">
+          <button id="settings-cancel" type="button" class="ghost-btn">Cancelar</button>
+          <button id="settings-save" type="button">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
