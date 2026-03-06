@@ -1,10 +1,10 @@
-# Mini Sterling
+# PDFling
 
 Editor de PDF para Chrome Extension (Manifest V3), pensado para trabajar de forma local, rapida y privada.
 
-## Que es Mini Sterling
+## Que es PDFling
 
-Mini Sterling es una extension para:
+PDFling es una extension para:
 
 - unir PDFs
 - navegar por paginas con miniaturas
@@ -70,7 +70,7 @@ Si quieres colaborar en UI, DX o rendimiento de PDFs, eres bienvenido.
 
 ## Captura
 
-![Mini Sterling Workspace](./img2.png)
+![PDFling Workspace](./img2.png)
 
 ---
 
