@@ -1,77 +1,123 @@
 # PDFling
 
-Editor de PDF para Chrome Extension (Manifest V3), pensado para trabajar de forma local, rapida y privada.
+Editor de PDF para Chrome Extension (Manifest V3), enfocado en productividad documental, procesamiento local y una experiencia visual de mesa de trabajo.
 
-## Que es PDFling
+![PDFling Workspace](./img2.png)
 
-PDFling es una extension para:
+## Resumen
 
-- unir PDFs
-- navegar por paginas con miniaturas
-- agregar imagenes/sellos y texto sobre el documento
-- eliminar paginas especificas
-- exportar el PDF final con nombre personalizado
-- usar un panel de IA para consultar y resumir contenido del PDF
+PDFling permite abrir y trabajar PDFs dentro de una extension de Chrome sin depender de servicios externos para el flujo principal de edicion. El proyecto prioriza:
 
-Todo el flujo esta orientado a una experiencia visual clara tipo "mesa de trabajo".
+- velocidad operativa para equipos
+- control sobre el resultado final
+- privacidad al procesar informacion en local
 
-## Caracteristicas destacadas
+## Funcionalidades actuales
 
-- Procesamiento local del PDF con `pdf.js`, `pdf-lib` y `fabric.js`
-- Interfaz moderna en tres paneles (paginas, lienzo, herramientas)
-- Biblioteca de sellos frecuente con almacenamiento local
-- Exportacion con panel integrado (sin modal del navegador)
-- Barra lateral izquierda colapsable y ajustable
-- Arquitectura modular en TypeScript
+- Carga y visualizacion de PDFs por pagina
+- Herramientas de anotacion sobre lienzo
+- Agregar texto libre
+- Insertar figuras geometricas (rectangulo, elipse, triangulo)
+- Configurar color, tamano y borde redondeado de figuras
+- Atajos y controles de deshacer/rehacer
+- Exportacion del PDF con anotaciones aplanadas
+- Historial local reciente para recuperacion de contexto
+- Soporte de idioma ES/EN en popup
+- Tema claro/oscuro sincronizado entre popup y workspace
 
-## Stack
+## Arquitectura
+
+El proyecto esta organizado en modulos TypeScript con separacion por responsabilidad:
+
+- `src/background/`: service worker y coordinacion de extension
+- `src/popup/`: interfaz inicial, acciones y configuraciones
+- `src/workspace/`: editor principal tipo mesa de trabajo
+- `src/services/`: servicios de PDF, IA y almacenamiento
+- `src/shared/`: contratos de mensajeria, errores y utilidades comunes
+
+## Stack tecnico
 
 - TypeScript
 - Webpack
 - Chrome Extension Manifest V3
-- pdfjs-dist
-- pdf-lib
-- fabric
+- `pdfjs-dist`
+- `pdf-lib`
+- `fabric`
 
-## Estructura principal
+## Inicio rapido
 
-```text
-src/
-  background/
-  popup/
-  services/
-  shared/
-  workspace/
-```
+Requisitos:
 
-## Como ejecutar
+- Node.js 18+
+- npm 9+
+- Chrome o navegador compatible con extensiones Chromium
+
+Instalacion y build:
 
 ```bash
 npm install
 npm run build
 ```
 
-Luego carga la carpeta `dist/` como extension desempaquetada en `chrome://extensions`.
+Carga local de extension:
 
-## Roadmap comunitario
+1. Abre `chrome://extensions`.
+2. Activa `Developer mode`.
+3. Selecciona `Load unpacked`.
+4. Elige la carpeta `dist/`.
 
-- mejoras de rendimiento para documentos grandes
-- historial/undo de operaciones
-- plantillas de sellos por equipo
-- internacionalizacion de la UI
+## Desarrollo
+
+Compilacion en modo desarrollo (watch):
+
+```bash
+npm run dev
+```
+
+Build de produccion:
+
+```bash
+npm run build
+```
+
+## Estructura del repositorio
+
+```text
+.
+|-- src/
+|   |-- background/
+|   |-- popup/
+|   |-- services/
+|   |-- shared/
+|   `-- workspace/
+|-- manifest.json
+|-- webpack.config.js
+`-- README.md
+```
+
+## Documentacion del proyecto
+
+- Contribucion: `CONTRIBUTING.md`
+- Seguridad: `SECURITY.md`
+- Codigo de conducta: `CODE_OF_CONDUCT.md`
+- Historial de cambios: `CHANGELOG.md`
+- Licencia: `LICENSE`
+
+## Roadmap sugerido
+
+- Optimizacion para documentos de gran tamano
+- Mas herramientas de anotacion colaborativa
+- Pruebas automatizadas para flujo de exportacion
+- Metricas de uso local para mejora de UX
 
 ## Contribuir
 
-1. Haz un fork
-2. Crea tu rama: `feature/mi-mejora`
-3. Abre un Pull Request con contexto y capturas
+Se aceptan mejoras de UX, rendimiento, arquitectura y documentacion. Revisa `CONTRIBUTING.md` antes de abrir cambios.
 
-Si quieres colaborar en UI, DX o rendimiento de PDFs, eres bienvenido.
+## Seguridad y privacidad
 
-## Captura
+PDFling esta disenado para procesar documentos en local siempre que sea posible. Si detectas una vulnerabilidad, reportala via `SECURITY.md`.
 
-![PDFling Workspace](./img2.png)
+## Licencia
 
----
-
-Construido para equipos que necesitan editar PDFs con velocidad, control y una experiencia cuidada.
+Este proyecto se distribuye bajo licencia MIT. Consulta `LICENSE` para detalle legal.

@@ -1,8 +1,8 @@
 {
-  "name": "mini-sterling",
+  "name": "pdfling",
   "version": "0.1.0",
   "private": true,
-  "description": "Mini Sterling Chrome extension (MV3) for local PDF processing.",
+  "description": "PDFling Chrome extension (MV3) for local PDF processing.",
   "scripts": {
     "build": "webpack --mode production",
     "dev": "webpack --mode development --watch"
