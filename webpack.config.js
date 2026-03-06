@@ -37,6 +37,8 @@ module.exports = {
         { from: "src/popup/popup.css", to: "popup.css" },
         { from: "src/workspace/workspace.html", to: "workspace.html" },
         { from: "src/workspace/workspace.css", to: "workspace.css" },
+        { from: "src/public/PDFlingICO.png", to: "PDFlingICO.png" },
+        { from: "src/public/icons", to: "icons" },
         {
           from: "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
           to: "pdf.worker.min.mjs"

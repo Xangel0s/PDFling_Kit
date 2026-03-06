@@ -60,8 +60,15 @@ body.onboarding-active {
   border-radius: 11px;
   display: grid;
   place-items: center;
-  background: #2563eb;
-  color: #ffffff;
+  background: transparent;
+  overflow: hidden;
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 11px;
 }
 
 h1 {
@@ -459,10 +466,49 @@ h1 {
   padding: 7px 8px;
 }
 
+.settings-field select {
+  border: 1px solid #c8d6ec;
+  border-radius: 9px;
+  min-height: 34px;
+  padding: 7px 8px;
+  background: #ffffff;
+  color: #1d3156;
+}
+
 .settings-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.help-card {
+  gap: 12px;
+}
+
+.help-body {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  color: #385173;
+  line-height: 1.45;
+}
+
+.help-body p {
+  margin: 0;
+}
+
+.help-body strong {
+  color: #1a355a;
+}
+
+.help-repo-link {
+  color: #2a60c2;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.help-repo-link:hover {
+  color: #1f4fa5;
 }
 
 .utility-body {
@@ -709,6 +755,115 @@ button:disabled {
   to {
     transform: rotate(18deg) translateX(340%);
   }
+}
+
+body.dark-mode {
+  --bg-main: #0d1117;
+  --ink: #f5f7fb;
+  --stroke: #2f3742;
+  background:
+    radial-gradient(circle at 0 0, #19212c 0%, transparent 56%),
+    radial-gradient(circle at 100% 100%, #151b24 0%, transparent 52%),
+    var(--bg-main);
+  color: #f5f7fb;
+}
+
+body.dark-mode .topbar,
+body.dark-mode .actions-grid,
+body.dark-mode .action-card,
+body.dark-mode .about-card,
+body.dark-mode .settings-card,
+body.dark-mode .utility-row,
+body.dark-mode .lang-toggle {
+  background: #161b22;
+  border-color: #30363d;
+  color: #edf2fa;
+}
+
+body.dark-mode .icon-btn {
+  color: #d0d7e3;
+}
+
+body.dark-mode .icon-btn:hover,
+body.dark-mode .action-card:hover {
+  background: #202732;
+}
+
+body.dark-mode .dropzone {
+  border-color: #3c4a5b;
+  background: linear-gradient(180deg, #1a222d 0%, #151c26 100%);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
+}
+
+body.dark-mode .dropzone:hover {
+  border-color: #4c6078;
+  background: linear-gradient(180deg, #202a37 0%, #1b2430 100%);
+}
+
+body.dark-mode .drop-icon {
+  background: #202832;
+  box-shadow: inset 0 0 0 1px #3a4452;
+}
+
+body.dark-mode .drop-sub,
+body.dark-mode .about-text,
+body.dark-mode #status,
+body.dark-mode .settings-field,
+body.dark-mode .utility-row span,
+body.dark-mode .modal-subtitle,
+body.dark-mode .feature-item p,
+body.dark-mode .terms-check,
+body.dark-mode .utility-empty {
+  color: #c2ccd8;
+}
+
+body.dark-mode .about-kicker,
+body.dark-mode .utility-row strong,
+body.dark-mode h1,
+body.dark-mode .drop-title,
+body.dark-mode .action-card,
+body.dark-mode .settings-card h2,
+body.dark-mode .modal-card h2,
+body.dark-mode .modal-card h3 {
+  color: #f5f7fb;
+}
+
+body.dark-mode .settings-field input,
+body.dark-mode .settings-field select,
+body.dark-mode #assistant-question,
+body.dark-mode .feature-item,
+body.dark-mode .utility-action-btn,
+body.dark-mode .lang-toggle {
+  background: #1d242f;
+  border-color: #333d4a;
+  color: #e6edf7;
+}
+
+body.dark-mode .help-body {
+  color: #c8d2de;
+}
+
+body.dark-mode .help-body strong {
+  color: #f5f7fb;
+}
+
+body.dark-mode .help-repo-link {
+  color: #89b4ff;
+}
+
+body.dark-mode .modal,
+body.dark-mode .settings-modal {
+  background: rgba(0, 0, 0, 0.56);
+}
+
+body.dark-mode .modal-card {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+body.dark-mode .ghost-btn {
+  background: #232b38 !important;
+  color: #dde6f3 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -21,24 +21,27 @@ const actionMerge = document.getElementById("action-merge") as HTMLButtonElement
 const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
 const expandBtn = document.getElementById("expand-btn") as HTMLButtonElement;
 const storageBtn = document.getElementById("storage-btn") as HTMLButtonElement;
+const helpBtn = document.getElementById("help-btn") as HTMLButtonElement;
 const settingsModal = document.getElementById("settings-modal") as HTMLDivElement;
 const utilityModal = document.getElementById("utility-modal") as HTMLDivElement;
+const helpModal = document.getElementById("help-modal") as HTMLDivElement;
+const helpCloseBtn = document.getElementById("help-close") as HTMLButtonElement;
+const helpOpenRepoBtn = document.getElementById("help-open-repo") as HTMLButtonElement;
+const helpRepoLink = document.getElementById("help-repo-link") as HTMLAnchorElement;
 const utilityTitle = document.getElementById("utility-title") as HTMLHeadingElement;
 const utilityBody = document.getElementById("utility-body") as HTMLDivElement;
 const utilityCloseBtn = document.getElementById("utility-close") as HTMLButtonElement;
 const utilityClearBtn = document.getElementById("utility-clear") as HTMLButtonElement;
-const endpointInput = document.getElementById("ai-endpoint") as HTMLInputElement;
-const apiKeyInput = document.getElementById("ai-apikey") as HTMLInputElement;
+const themeSelect = document.getElementById("theme-select") as HTMLSelectElement;
 const settingsSaveBtn = document.getElementById("settings-save") as HTMLButtonElement;
 const settingsCancelBtn = document.getElementById("settings-cancel") as HTMLButtonElement;
 const languageToggleBtn = document.getElementById("language-toggle-btn") as HTMLButtonElement;
 
 const ONBOARDING_KEY = "onboardingCompleted";
-const AI_ENDPOINT_KEY = "aiEndpoint";
-const AI_APIKEY_KEY = "aiApiKey";
 const HISTORY_KEY = "recentWorkspaceHistory";
 const WORKSPACE_PENDING_ACTION_KEY = "workspacePendingAction";
 const POPUP_LANGUAGE_KEY = "popupLanguage";
+const WORKSPACE_THEME_KEY = "workspaceTheme";
 const MAX_HISTORY_ITEMS = 15;
 let pendingModeAfterPdfPick: Exclude<PopupActionMode, "default" | "merge"> | null = null;
 let popupLanguage: PopupLanguage = "es";
@@ -54,6 +57,7 @@ function debugLog(step: string, detail?: unknown): void {
 
 type PopupActionMode = "default" | "merge" | "add-image" | "edit-text";
 type PopupLanguage = "es" | "en";
+type PopupTheme = "light" | "dark";
 
 interface LanguageCopy {
   dropTitle: string;
@@ -66,10 +70,21 @@ interface LanguageCopy {
   actionText: string;
   historyTooltip: string;
   storageTooltip: string;
+  helpTooltip: string;
   settingsTooltip: string;
   dropzoneAria: string;
   languageAria: string;
   switchTo: string;
+  helpTitle: string;
+  helpIntro: string;
+  helpOpenSource: string;
+  helpCreatorLabel: string;
+  helpCreatorValue: string;
+  helpRepoLabel: string;
+  helpRepoLinkText: string;
+  helpSupport: string;
+  helpCloseButton: string;
+  helpRepoButton: string;
 }
 
 const UI_COPY: Record<PopupLanguage, LanguageCopy> = {
@@ -81,13 +96,24 @@ const UI_COPY: Record<PopupLanguage, LanguageCopy> = {
     aboutText: "PDFling te ayuda a editar, combinar y preparar PDFs en local con una experiencia rapida y clara.",
     actionMerge: "Unir PDFs",
     actionImage: "Agregar Imagen",
-    actionText: "Editar Texto",
+    actionText: "Agregar Texto",
     historyTooltip: "Historial",
     storageTooltip: "Storage",
+    helpTooltip: "Ayuda",
     settingsTooltip: "Ajustes",
     dropzoneAria: "Seleccionar PDF",
     languageAria: "Cambiar idioma",
-    switchTo: "EN"
+    switchTo: "EN",
+    helpTitle: "Sobre PDFling",
+    helpIntro: "PDFling es una extension para editar y preparar PDFs de forma local, rapida y privada.",
+    helpOpenSource: "Este proyecto es de codigo abierto y cualquier persona puede revisar o contribuir.",
+    helpCreatorLabel: "Creado por:",
+    helpCreatorValue: "Xangel0s",
+    helpRepoLabel: "Repositorio:",
+    helpRepoLinkText: "github.com/Xangel0s/PDFling_Kit",
+    helpSupport: "Si te sirve, puedes apoyar el proyecto con una estrella en GitHub.",
+    helpCloseButton: "Cerrar",
+    helpRepoButton: "Abrir repositorio"
   },
   en: {
     dropTitle: "Upload PDF",
@@ -97,13 +123,24 @@ const UI_COPY: Record<PopupLanguage, LanguageCopy> = {
     aboutText: "PDFling helps you edit, merge, and prepare PDFs locally with a fast and clear workflow.",
     actionMerge: "Merge PDFs",
     actionImage: "Add Image",
-    actionText: "Edit Text",
+    actionText: "Add Text",
     historyTooltip: "History",
     storageTooltip: "Storage",
+    helpTooltip: "Help",
     settingsTooltip: "Settings",
     dropzoneAria: "Select PDF",
     languageAria: "Change language",
-    switchTo: "ES"
+    switchTo: "ES",
+    helpTitle: "About PDFling",
+    helpIntro: "PDFling is an extension to edit and prepare PDFs locally with a fast and private workflow.",
+    helpOpenSource: "This project is open source and anyone can review the code or contribute.",
+    helpCreatorLabel: "Created by:",
+    helpCreatorValue: "Xangel0s",
+    helpRepoLabel: "Repository:",
+    helpRepoLinkText: "github.com/Xangel0s/PDFling_Kit",
+    helpSupport: "If this helps you, support the project with a GitHub star.",
+    helpCloseButton: "Close",
+    helpRepoButton: "Open repository"
   }
 };
 
@@ -125,6 +162,30 @@ interface PendingWorkspaceAction {
 
 function setStatus(message: string): void {
   statusEl.textContent = message;
+}
+
+function applyPopupTheme(theme: PopupTheme): void {
+  const isDark = theme === "dark";
+  document.body.classList.toggle("dark-mode", isDark);
+}
+
+async function initPopupTheme(): Promise<void> {
+  const stored = await chrome.storage.local.get([WORKSPACE_THEME_KEY]);
+  const theme: PopupTheme = stored[WORKSPACE_THEME_KEY] === "dark" ? "dark" : "light";
+  applyPopupTheme(theme);
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(changes, WORKSPACE_THEME_KEY)) {
+      return;
+    }
+
+    const next = changes[WORKSPACE_THEME_KEY]?.newValue;
+    applyPopupTheme(next === "dark" ? "dark" : "light");
+  });
 }
 
 function applyLanguage(language: PopupLanguage): void {
@@ -150,6 +211,8 @@ function applyLanguage(language: PopupLanguage): void {
   expandBtn.setAttribute("aria-label", copy.historyTooltip);
   storageBtn.title = copy.storageTooltip;
   storageBtn.setAttribute("aria-label", copy.storageTooltip);
+  helpBtn.title = copy.helpTooltip;
+  helpBtn.setAttribute("aria-label", copy.helpTooltip);
   settingsBtn.title = copy.settingsTooltip;
   settingsBtn.setAttribute("aria-label", copy.settingsTooltip);
   languageToggleBtn.title = copy.languageAria;
@@ -199,7 +262,7 @@ function formatMode(mode: PopupActionMode): string {
   }
 
   if (mode === "edit-text") {
-    return "Editar Texto";
+    return "Agregar Texto";
   }
 
   return "Abrir";
@@ -383,23 +446,27 @@ function arrayBufferToRuntimePayload(buffer: ArrayBuffer): { data: number[] } {
   return { data: Array.from(new Uint8Array(buffer)) };
 }
 
-async function getAIConfig(): Promise<{ endpoint: string; apiKey: string }> {
-  const saved = await chrome.storage.local.get([AI_ENDPOINT_KEY, AI_APIKEY_KEY]);
-  return {
-    endpoint: (saved[AI_ENDPOINT_KEY] as string) ?? "",
-    apiKey: (saved[AI_APIKEY_KEY] as string) ?? ""
-  };
+async function getWorkspaceTheme(): Promise<PopupTheme> {
+  const saved = await chrome.storage.local.get([WORKSPACE_THEME_KEY]);
+  return saved[WORKSPACE_THEME_KEY] === "dark" ? "dark" : "light";
 }
 
 async function openSettings(): Promise<void> {
-  const config = await getAIConfig();
-  endpointInput.value = config.endpoint;
-  apiKeyInput.value = config.apiKey;
+  const theme = await getWorkspaceTheme();
+  themeSelect.value = theme;
   settingsModal.classList.remove("hidden");
 }
 
 function closeSettings(): void {
   settingsModal.classList.add("hidden");
+}
+
+function openHelp(): void {
+  helpModal.classList.remove("hidden");
+}
+
+function closeHelp(): void {
+  helpModal.classList.add("hidden");
 }
 
 function setModalVisibility(visible: boolean): void {
@@ -552,7 +619,7 @@ inputEl.addEventListener("change", () => {
 
   if (pendingModeAfterPdfPick === "edit-text") {
     pendingModeAfterPdfPick = null;
-    setStatus("Archivo cargado. Activando modo editar texto...");
+    setStatus("Archivo cargado. Activando modo agregar texto...");
     actionText.click();
     return;
   }
@@ -700,7 +767,7 @@ actionText.addEventListener("click", () => {
   void (async () => {
     const pdfFile = inputEl.files?.[0];
     if (!pdfFile) {
-      setStatus("Selecciona un PDF para habilitar edicion de texto.");
+      setStatus("Selecciona un PDF para habilitar agregar texto.");
       pendingModeAfterPdfPick = "edit-text";
       openPdfPicker(false);
       return;
@@ -713,7 +780,7 @@ actionText.addEventListener("click", () => {
         mode: "edit-text"
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo iniciar Editar Texto.";
+      const message = error instanceof Error ? error.message : "No se pudo iniciar Agregar Texto.";
       setStatus(message);
     }
   })();
@@ -723,14 +790,30 @@ settingsBtn.addEventListener("click", () => {
   void openSettings();
 });
 
+helpBtn.addEventListener("click", () => {
+  openHelp();
+});
+
+helpCloseBtn.addEventListener("click", () => {
+  closeHelp();
+});
+
+helpOpenRepoBtn.addEventListener("click", () => {
+  window.open(helpRepoLink.href, "_blank", "noopener,noreferrer");
+});
+
+helpModal.addEventListener("click", (event) => {
+  if (event.target === helpModal) {
+    closeHelp();
+  }
+});
+
 settingsSaveBtn.addEventListener("click", () => {
   void (async () => {
-    await chrome.storage.local.set({
-      [AI_ENDPOINT_KEY]: endpointInput.value.trim(),
-      [AI_APIKEY_KEY]: apiKeyInput.value.trim()
-    });
+    const selectedTheme: PopupTheme = themeSelect.value === "dark" ? "dark" : "light";
+    await chrome.storage.local.set({ [WORKSPACE_THEME_KEY]: selectedTheme });
     closeSettings();
-    setStatus("Configuracion IA guardada.");
+    setStatus("Tema guardado correctamente.");
   })();
 });
 
@@ -755,8 +838,8 @@ storageBtn.addEventListener("click", () => {
   void (async () => {
     const stored = await chrome.storage.local.get(null);
     const stampCount = Array.isArray(stored.stampLibrary) ? (stored.stampLibrary as unknown[]).length : 0;
-    const hasAi = Boolean(stored[AI_ENDPOINT_KEY]) && Boolean(stored[AI_APIKEY_KEY]);
     const onboarding = Boolean(stored[ONBOARDING_KEY]);
+    const theme = stored[WORKSPACE_THEME_KEY] === "dark" ? "oscuro" : "claro";
 
     renderUtilityRows(
       [
@@ -765,8 +848,8 @@ storageBtn.addEventListener("click", () => {
           meta: "Biblioteca local en chrome.storage.local"
         },
         {
-          title: `Configuracion IA: ${hasAi ? "lista" : "pendiente"}`,
-          meta: "Endpoint/API Key"
+          title: `Tema actual: ${theme}`,
+          meta: "Preferencia de apariencia"
         },
         {
           title: `Onboarding: ${onboarding ? "completado" : "pendiente"}`,
@@ -823,3 +906,4 @@ welcomeDoneButton.addEventListener("click", () => {
 
 void initOnboarding();
 void initLanguage();
+void initPopupTheme();

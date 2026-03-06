@@ -1,5 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 import type { GetSessionDataRequest, GetSessionDataResponse } from "../shared/messaging/protocol";
+import { IndexedDbStore } from "../services/storage/IndexedDbStore";
 import { FabricOverlay, type ShapeKind, type ShapeOptions, type StampPlacement } from "./canvas/FabricOverlay";
 import { PdfFlattenService, type ShapePlacement, type TextPlacement } from "./export/PdfFlattenService";
 import { PdfRenderer } from "./render/PdfRenderer";
@@ -17,6 +18,9 @@ const deleteObjectBtn = document.getElementById("delete-object-btn") as HTMLButt
 const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
 const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const compressBtn = document.getElementById("compress-btn") as HTMLButtonElement;
+const themeToggleBtn = document.getElementById("theme-toggle-btn") as HTMLButtonElement;
+const themeToggleIcon = document.getElementById("theme-toggle-icon") as HTMLSpanElement;
+const themeToggleLabel = document.getElementById("theme-toggle-label") as HTMLSpanElement;
 const exportBtn = document.getElementById("export-btn") as HTMLButtonElement;
 const exportNamePopover = document.getElementById("export-name-popover") as HTMLDivElement;
 const exportNameInput = document.getElementById("export-name-input") as HTMLInputElement;
@@ -54,9 +58,13 @@ const canvasScrollArea = document.querySelector(".canvas-scroll-area") as HTMLDi
 const renderer = new PdfRenderer();
 const overlay = new FabricOverlay(overlayCanvas);
 const flattenService = new PdfFlattenService();
+const vaultStore = new IndexedDbStore();
 
 const STAMP_LIBRARY_KEY = "stampLibrary";
 const WORKSPACE_PENDING_ACTION_KEY = "workspacePendingAction";
+const WORKSPACE_THEME_KEY = "workspaceTheme";
+const HISTORY_KEY = "recentWorkspaceHistory";
+const MAX_HISTORY_ITEMS = 15;
 
 interface StampLibraryItem {
   id: string;
@@ -78,6 +86,19 @@ interface OverlayHistoryEntry {
   page: number;
   snapshot: Record<string, unknown>;
 }
+
+type PopupActionMode = "default" | "merge" | "add-image" | "edit-text";
+
+interface WorkspaceHistoryItem {
+  id: string;
+  fileName: string;
+  mode: PopupActionMode;
+  openedAt: number;
+  sizeBytes: number;
+  vaultKey?: string;
+}
+
+type WorkspaceTheme = "light" | "dark";
 
 let sourcePdfBuffer: ArrayBuffer | null = null;
 let sourceFileName = "documento.pdf";
@@ -129,6 +150,28 @@ function debugCanvasLog(step: string, detail?: unknown): void {
   }
 
   console.info(`[MiniSterling][canvas] ${step}`);
+}
+
+function applyWorkspaceTheme(theme: WorkspaceTheme): void {
+  const isDark = theme === "dark";
+  document.body.classList.toggle("dark-mode", isDark);
+  themeToggleIcon.textContent = isDark ? "light_mode" : "dark_mode";
+  themeToggleLabel.textContent = isDark ? "Modo claro" : "Modo oscuro";
+  themeToggleBtn.title = isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro";
+  themeToggleBtn.setAttribute("aria-label", themeToggleBtn.title);
+}
+
+async function initWorkspaceTheme(): Promise<void> {
+  const stored = await chrome.storage.local.get([WORKSPACE_THEME_KEY]);
+  const theme = stored[WORKSPACE_THEME_KEY] === "dark" ? "dark" : "light";
+  applyWorkspaceTheme(theme);
+}
+
+async function toggleWorkspaceTheme(): Promise<void> {
+  const isDark = document.body.classList.contains("dark-mode");
+  const nextTheme: WorkspaceTheme = isDark ? "light" : "dark";
+  applyWorkspaceTheme(nextTheme);
+  await chrome.storage.local.set({ [WORKSPACE_THEME_KEY]: nextTheme });
 }
 
 function remapPageStateAfterDelete<T>(source: Map<number, T>, deletedPage: number): Map<number, T> {
@@ -234,17 +277,58 @@ function downloadPendingExport(): void {
     return;
   }
 
+  const blobToDownload = pendingExportBlob;
   const finalFileName = normalizeExportFileName(exportNameInput.value);
-  const downloadUrl = URL.createObjectURL(pendingExportBlob);
+  const downloadUrl = URL.createObjectURL(blobToDownload);
   const link = document.createElement("a");
   link.href = downloadUrl;
   link.download = finalFileName;
   link.click();
   URL.revokeObjectURL(downloadUrl);
 
+  void (async () => {
+    try {
+      const buffer = await blobToDownload.arrayBuffer();
+      await appendHistoryFromWorkspace(finalFileName, "default", buffer);
+    } catch (error) {
+      console.warn("[MiniSterling][workspace] No se pudo guardar historial de exportacion", error);
+    }
+  })();
+
   closeExportNamePopover(true);
   const verb = pendingDownloadMode === "compress" ? "comprimido" : "exportado";
   setStatus(`PDF ${verb} correctamente como ${finalFileName}.`);
+}
+
+async function appendHistoryFromWorkspace(fileName: string, mode: PopupActionMode, arrayBuffer: ArrayBuffer): Promise<void> {
+  const id = crypto.randomUUID();
+  const vaultKey = `history:${id}`;
+  const copied = arrayBuffer.slice(0);
+  await vaultStore.setArrayBuffer(vaultKey, copied);
+
+  const stored = await chrome.storage.local.get([HISTORY_KEY]);
+  const current = (stored[HISTORY_KEY] as WorkspaceHistoryItem[] | undefined) ?? [];
+  const next: WorkspaceHistoryItem[] = [
+    {
+      id,
+      fileName,
+      mode,
+      sizeBytes: copied.byteLength,
+      openedAt: Date.now(),
+      vaultKey
+    },
+    ...current
+  ].slice(0, MAX_HISTORY_ITEMS);
+
+  const stale = current.slice(Math.max(0, MAX_HISTORY_ITEMS - 1));
+  await Promise.allSettled(
+    stale
+      .map((item) => item.vaultKey)
+      .filter((key): key is string => Boolean(key))
+      .map((key) => vaultStore.remove(key))
+  );
+
+  await chrome.storage.local.set({ [HISTORY_KEY]: next });
 }
 
 function updateZoomIndicator(): void {
@@ -1674,6 +1758,10 @@ compressBtn.addEventListener("click", () => {
   void compressCurrentPdf();
 });
 
+themeToggleBtn.addEventListener("click", () => {
+  void toggleWorkspaceTheme();
+});
+
 exportCancelBtn.addEventListener("click", () => {
   closeExportNamePopover(true);
   setStatus("Exportacion cancelada por el usuario.");
@@ -1886,5 +1974,6 @@ updateDocumentMeta();
 void renderPageThumbs();
 updatePageIndicator();
 void loadStampLibrary();
+void initWorkspaceTheme();
 
 void loadSessionPdf();

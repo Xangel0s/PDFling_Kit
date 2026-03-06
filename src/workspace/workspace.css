@@ -80,15 +80,11 @@ input {
   gap: 8px;
 }
 
-.brand-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: var(--accent);
-  color: #ffffff;
-  font-size: 18px;
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .brand h1 {
@@ -186,6 +182,10 @@ input {
 .share-btn .material-symbols-outlined,
 .export-btn .material-symbols-outlined {
   font-size: 18px;
+}
+
+.theme-toggle-btn {
+  padding: 0 12px;
 }
 
 .export-name-popover {
@@ -1146,6 +1146,142 @@ body.pages-collapsed .pages-resizer {
 #workspace-status.is-visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+body.dark-mode {
+  --bg-main: #0d1117;
+  --line: #262d36;
+  --ink: #f5f7fb;
+  --muted: #a7b0be;
+  background: #0d1117;
+  color: #f5f7fb;
+}
+
+body.dark-mode .topbar,
+body.dark-mode .pages-panel,
+body.dark-mode .pages-panel-head,
+body.dark-mode .tools-panel,
+body.dark-mode .viewer-toolbar,
+body.dark-mode .floating-tools,
+body.dark-mode .shape-popover,
+body.dark-mode .export-name-popover {
+  background: #161b22;
+  border-color: #30363d;
+  color: #f5f7fb;
+}
+
+body.dark-mode .canvas-panel {
+  background: #0f141c;
+}
+
+body.dark-mode .doc-meta,
+body.dark-mode .page-import-card,
+body.dark-mode .thumb-preview,
+body.dark-mode .stamp-item,
+body.dark-mode .full-btn,
+body.dark-mode .stamp-dropzone,
+body.dark-mode .dev-support-card,
+body.dark-mode .shape-kind-btn,
+body.dark-mode .shape-mini-field input,
+body.dark-mode .shape-mini-actions .ghost-btn,
+body.dark-mode .export-name-input,
+body.dark-mode .pages-toggle-btn {
+  background: #1c2128;
+  border-color: #30363d;
+  color: #e6ebf3;
+}
+
+body.dark-mode .share-btn,
+body.dark-mode .ghost-btn,
+body.dark-mode .floating-tool-btn,
+body.dark-mode .tab-btn {
+  color: #e8edf5;
+}
+
+body.dark-mode .share-btn {
+  background: #1c232d;
+}
+
+body.dark-mode .share-btn:hover,
+body.dark-mode .floating-tool-btn:hover,
+body.dark-mode .ghost-btn:hover,
+body.dark-mode .full-btn:hover,
+body.dark-mode .shape-kind-btn:hover {
+  background: #262d37;
+}
+
+body.dark-mode .pages-panel-head,
+body.dark-mode .tool-tabs {
+  border-color: #30363d;
+}
+
+body.dark-mode .full-btn,
+body.dark-mode .stamp-dropzone,
+body.dark-mode .page-import-card {
+  border-color: #3a4452;
+  color: #e5ebf5;
+}
+
+body.dark-mode .full-btn:disabled {
+  background: #1c2128;
+  color: #8f98a6;
+  border-color: #353f4c;
+  opacity: 0.7;
+}
+
+body.dark-mode .floating-tool-btn.is-active,
+body.dark-mode .shape-kind-btn.active {
+  background: #2b3441;
+  border-color: #3d4858;
+  color: #ffffff;
+}
+
+body.dark-mode .shape-mini-check {
+  border-color: #3b4554;
+}
+
+body.dark-mode #page-indicator,
+body.dark-mode .zoom-indicator,
+body.dark-mode .doc-chip-label,
+body.dark-mode .doc-chip-sep,
+body.dark-mode #doc-stats,
+body.dark-mode .panel-hint,
+body.dark-mode .dev-support-title,
+body.dark-mode .dev-support-sub,
+body.dark-mode .thumb-label,
+body.dark-mode #pages-title,
+body.dark-mode #workspace-status {
+  color: #c1c9d5;
+}
+
+body.dark-mode .page-thumb {
+  background: #1a2028;
+  border-color: #3a434f;
+}
+
+body.dark-mode .page-thumb.active {
+  border-color: #57657a;
+  box-shadow: 0 0 0 2px rgba(125, 141, 161, 0.3);
+}
+
+body.dark-mode .stamp-item span,
+body.dark-mode #doc-name,
+body.dark-mode .shape-mini-field span,
+body.dark-mode .shape-mini-check span,
+body.dark-mode .export-name-label,
+body.dark-mode .utility-row strong,
+body.dark-mode .utility-row span {
+  color: #f2f5fa;
+}
+
+body.dark-mode .stamp-item img,
+body.dark-mode #pdf-canvas {
+  background: #ffffff;
+}
+
+body.dark-mode #workspace-status {
+  background: rgba(20, 24, 30, 0.95);
+  border-color: #343c47;
 }
 
 @media (max-width: 1180px) {
