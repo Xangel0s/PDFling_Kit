@@ -502,6 +502,12 @@ input {
   transform: translateY(-2px);
 }
 
+.floating-tool-btn.is-active {
+  background: #e7efff;
+  color: #2b5ec7;
+  box-shadow: inset 0 0 0 1px #c9daf7;
+}
+
 .floating-tool-btn.danger {
   color: #c04a64;
 }
@@ -549,6 +555,114 @@ input {
   transform: translateX(-50%) translateY(0);
 }
 
+.shape-popover {
+  width: 294px;
+  border: 1px solid #d7e2f2;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 16px 30px rgba(22, 40, 74, 0.18);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  transform-origin: top center;
+  animation: shapePopIn 0.18s ease-out;
+}
+
+.shape-popover[hidden] {
+  display: none !important;
+}
+
+.shape-quick-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.shape-kind-btn {
+  min-height: 34px;
+  border: 1px solid #cfdbef;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #4d6488;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+
+.shape-kind-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.shape-kind-btn:hover {
+  transform: translateY(-1px);
+  background: #eef4ff;
+}
+
+.shape-kind-btn.active {
+  background: #e7efff;
+  border-color: #97b5ee;
+  color: #275bbf;
+}
+
+.shape-mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shape-mini-field {
+  display: grid;
+  gap: 4px;
+}
+
+.shape-mini-field span,
+.shape-mini-check span {
+  font-size: 11px;
+  color: #577091;
+  font-weight: 700;
+}
+
+.shape-mini-field input[type="number"],
+.shape-mini-field input[type="color"] {
+  min-height: 32px;
+  border: 1px solid #c9d9f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0 8px;
+}
+
+.shape-mini-field input[type="color"] {
+  padding: 3px;
+}
+
+.shape-mini-check {
+  min-height: 32px;
+  border: 1px dashed #cfdbef;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.shape-mini-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shape-mini-actions .ghost-btn {
+  border-radius: 9px;
+  border: 1px solid #cfdcf0;
+  min-height: 34px;
+  background: #f4f8ff;
+}
+
+.shape-mini-actions .ghost-btn:hover {
+  background: #eaf2ff;
+}
+
 .viewer-toolbar {
   position: relative;
   display: inline-flex;
@@ -567,6 +681,23 @@ input {
   color: #3c5174;
   font-size: 12px;
   font-weight: 700;
+}
+
+.icon-ghost-btn {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  padding: 0;
+  border-right: 1px solid #e8edf6;
+}
+
+.icon-ghost-btn .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.icon-ghost-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 #page-indicator {
@@ -755,7 +886,20 @@ body.space-pan-active .canvas-stack > .canvas-container {
   gap: 8px;
   margin-top: 10px;
   flex: 1;
+  min-height: 120px;
   align-content: start;
+}
+
+
+@keyframes shapePopIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .dev-support-card {

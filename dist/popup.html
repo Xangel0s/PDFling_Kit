@@ -74,13 +74,20 @@
         </div>
       </header>
 
-      <section id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Seleccionar PDF">
+      <section id="dropzone" class="dropzone reveal" role="button" tabindex="0" aria-label="Seleccionar PDF">
         <div class="drop-icon" aria-hidden="true">
           <span class="material-symbols-outlined">upload_file</span>
         </div>
-        <p class="drop-title">Upload PDF</p>
-        <p class="drop-sub">Drag and drop or click to browse</p>
-        <button id="select-file-btn" type="button" class="select-file-btn">Select File</button>
+        <p class="drop-title" data-i18n="dropTitle">Upload PDF</p>
+        <p class="drop-sub" data-i18n="dropSubtitle">Drag and drop or click to browse</p>
+        <button id="select-file-btn" type="button" class="select-file-btn" data-i18n="selectFileButton">Select File</button>
+      </section>
+
+      <section class="about-card reveal" aria-label="Sobre PDFling">
+        <p class="about-kicker" data-i18n="aboutKicker">About PDFling</p>
+        <p class="about-text" data-i18n="aboutText">
+          PDFling te ayuda a editar, combinar y preparar PDFs en local con una experiencia rapida y clara.
+        </p>
       </section>
 
       <input id="pdf-input" class="hidden-input" type="file" accept="application/pdf" />
@@ -88,20 +95,30 @@
       <input id="image-input" class="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" />
       <button id="open-workspace" type="button" class="hidden-action">Abrir Mesa de Trabajo</button>
 
-      <section class="actions-grid">
-        <button id="action-merge" type="button" class="action-card">
-          <span class="action-icon material-symbols-outlined">layers</span>
-          <span>Unir PDFs</span>
-        </button>
-        <button id="action-image" type="button" class="action-card">
-          <span class="action-icon material-symbols-outlined">image</span>
-          <span>Agregar Imagen</span>
-        </button>
-        <button id="action-text" type="button" class="action-card">
-          <span class="action-icon material-symbols-outlined">text_fields</span>
-          <span>Editar Texto</span>
-        </button>
+      <section class="actions-dock" aria-label="Acciones principales">
+        <div class="actions-grid">
+          <button id="action-merge" type="button" class="action-card reveal">
+            <span class="action-icon material-symbols-outlined">layers</span>
+            <span data-i18n="actionMerge">Unir PDFs</span>
+          </button>
+          <button id="action-image" type="button" class="action-card reveal">
+            <span class="action-icon material-symbols-outlined">image</span>
+            <span data-i18n="actionImage">Agregar Imagen</span>
+          </button>
+          <button id="action-text" type="button" class="action-card reveal">
+            <span class="action-icon material-symbols-outlined">text_fields</span>
+            <span data-i18n="actionText">Editar Texto</span>
+          </button>
+        </div>
       </section>
+
+      <button
+        id="language-toggle-btn"
+        type="button"
+        class="lang-toggle"
+        aria-label="Cambiar idioma"
+        title="Cambiar idioma"
+      >EN</button>
 
       <p id="status" aria-live="polite"></p>
     </main>

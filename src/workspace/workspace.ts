@@ -1,8 +1,8 @@
 import { PDFDocument } from "pdf-lib";
 import type { GetSessionDataRequest, GetSessionDataResponse } from "../shared/messaging/protocol";
-import { FabricOverlay, type StampPlacement } from "./canvas/FabricOverlay";
-import { PdfFlattenService, type TextPlacement } from "./export/PdfFlattenService";
-import { PdfRenderer, type PageTextBlock } from "./render/PdfRenderer";
+import { FabricOverlay, type ShapeKind, type ShapeOptions, type StampPlacement } from "./canvas/FabricOverlay";
+import { PdfFlattenService, type ShapePlacement, type TextPlacement } from "./export/PdfFlattenService";
+import { PdfRenderer } from "./render/PdfRenderer";
 
 const pdfCanvas = document.getElementById("pdf-canvas") as HTMLCanvasElement;
 const overlayCanvas = document.getElementById("overlay-canvas") as HTMLCanvasElement;
@@ -10,9 +10,12 @@ const canvasStackEl = document.getElementById("canvas-stack") as HTMLDivElement;
 const mergeInput = document.getElementById("merge-input") as HTMLInputElement;
 const mergeBtn = document.getElementById("merge-btn") as HTMLButtonElement;
 const addImageBtn = document.getElementById("add-image-btn") as HTMLButtonElement;
-const editTextBtn = document.getElementById("edit-text-btn") as HTMLButtonElement;
 const addTextBtn = document.getElementById("add-text-btn") as HTMLButtonElement;
+const addShapeBtn = document.getElementById("add-shape-btn") as HTMLButtonElement;
+const shapePopover = document.getElementById("shape-popover") as HTMLDivElement;
 const deleteObjectBtn = document.getElementById("delete-object-btn") as HTMLButtonElement;
+const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
+const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const compressBtn = document.getElementById("compress-btn") as HTMLButtonElement;
 const exportBtn = document.getElementById("export-btn") as HTMLButtonElement;
 const exportNamePopover = document.getElementById("export-name-popover") as HTMLDivElement;
@@ -38,6 +41,14 @@ const uploadStampBtn = document.getElementById("upload-stamp-btn") as HTMLButton
 const stampDropzone = document.getElementById("stamp-dropzone") as HTMLDivElement;
 const stampUploadInput = document.getElementById("stamp-upload-input") as HTMLInputElement;
 const stampLibraryEl = document.getElementById("stamp-library") as HTMLDivElement;
+const shapeKindButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".shape-kind-btn"));
+const shapeColorInput = document.getElementById("shape-color-input") as HTMLInputElement;
+const shapeWidthInput = document.getElementById("shape-width-input") as HTMLInputElement;
+const shapeHeightInput = document.getElementById("shape-height-input") as HTMLInputElement;
+const shapeRoundedWrap = document.getElementById("shape-rounded-wrap") as HTMLLabelElement;
+const shapeRoundedInput = document.getElementById("shape-rounded-input") as HTMLInputElement;
+const shapeCreateBtn = document.getElementById("shape-create-btn") as HTMLButtonElement;
+const shapeApplyBtn = document.getElementById("shape-apply-btn") as HTMLButtonElement;
 const canvasScrollArea = document.querySelector(".canvas-scroll-area") as HTMLDivElement;
 
 const renderer = new PdfRenderer();
@@ -63,6 +74,11 @@ interface PendingWorkspaceAction {
   imageName?: string;
 }
 
+interface OverlayHistoryEntry {
+  page: number;
+  snapshot: Record<string, unknown>;
+}
+
 let sourcePdfBuffer: ArrayBuffer | null = null;
 let sourceFileName = "documento.pdf";
 let renderScale = 1.25;
@@ -72,7 +88,6 @@ let pendingExportBlob: Blob | null = null;
 let pendingDownloadMode: "export" | "compress" = "export";
 let statusHideTimer: number | null = null;
 let draggingStampId: string | null = null;
-let textEditModeEnabled = false;
 let isSpacePanReady = false;
 let isSpacePanning = false;
 let panStartClientX = 0;
@@ -87,9 +102,25 @@ const A4_PLACEHOLDER_HEIGHT = 842;
 const MIN_CANVAS_ZOOM = 0.4;
 const MAX_CANVAS_ZOOM = 2.5;
 const CANVAS_ZOOM_STEP = 0.1;
+let selectedShapeKind: ShapeKind = "rect";
 let canvasZoom = 1;
 let lastCanvasScrollLeft = 0;
 let lastCanvasScrollTop = 0;
+let suspendHistoryTracking = false;
+let restoreInProgress = false;
+const overlayUndoStack: OverlayHistoryEntry[] = [];
+const overlayRedoStack: OverlayHistoryEntry[] = [];
+const MAX_OVERLAY_HISTORY = 80;
+
+overlay.onMutation(() => {
+  if (restoreInProgress) {
+    return;
+  }
+
+  pageOverlayState.set(currentPage, overlay.serialize());
+  recordOverlaySnapshot(true);
+  syncShapeInputsFromSelection();
+});
 
 function debugCanvasLog(step: string, detail?: unknown): void {
   if (detail !== undefined) {
@@ -737,35 +768,6 @@ async function upsertStampFromDataUrl(name: string, mimeType: string, dataUrl: s
   return true;
 }
 
-async function detectEditableTextOnCurrentPage(): Promise<void> {
-  if (!sourcePdfBuffer) {
-    setStatus("Carga un PDF antes de editar texto.");
-    return;
-  }
-
-  const blocks = await renderer.extractPageTextBlocks(currentPage, renderScale);
-  if (blocks.length === 0) {
-    setStatus("No se detecto texto editable en esta pagina.");
-    return;
-  }
-
-  const normalized: PageTextBlock[] = blocks
-    .map((block) => ({
-      ...block,
-      width: Math.min(pdfCanvas.width - block.x, Math.max(20, block.width))
-    }))
-    .filter((block) => block.width > 0 && block.y < pdfCanvas.height);
-
-  const added = overlay.addDetectedTextBlocks(normalized);
-  await persistCurrentPageOverlay();
-
-  if (added > 0) {
-    setStatus(`Analisis completado en pagina ${currentPage}: ${added} bloque(s) editable(s). Doble clic para editar.`);
-  } else {
-    setStatus("El texto de esta pagina ya estaba listo para editar.");
-  }
-}
-
 async function buildFlattenedPdfBlob(requireOverlayContent: boolean): Promise<Blob | null> {
   if (!sourcePdfBuffer) {
     return null;
@@ -775,14 +777,16 @@ async function buildFlattenedPdfBlob(requireOverlayContent: boolean): Promise<Bl
 
   const allPlacements: StampPlacement[] = [];
   const allTextPlacements: TextPlacement[] = [];
+  const allShapePlacements: ShapePlacement[] = [];
   pageOverlayState.forEach((serialized, pageNumber) => {
     allPlacements.push(...collectPlacementsFromSerialized(serialized, pageNumber - 1));
     allTextPlacements.push(...collectTextPlacementsFromSerialized(serialized, pageNumber - 1));
+    allShapePlacements.push(...collectShapePlacementsFromSerialized(serialized, pageNumber - 1));
   });
 
-  const hasOverlayContent = allPlacements.length > 0 || allTextPlacements.length > 0;
+  const hasOverlayContent = allPlacements.length > 0 || allTextPlacements.length > 0 || allShapePlacements.length > 0;
   if (requireOverlayContent && !hasOverlayContent) {
-    setStatus("No hay imagenes ni textos colocados para exportar.");
+    setStatus("No hay imagenes, textos u objetos colocados para exportar.");
     return null;
   }
 
@@ -803,6 +807,7 @@ async function buildFlattenedPdfBlob(requireOverlayContent: boolean): Promise<Bl
     placements: allPlacements,
     stampAssets,
     textPlacements: allTextPlacements,
+    shapePlacements: allShapePlacements,
     renderScale
   });
 }
@@ -1068,6 +1073,188 @@ function normalizeColor(value: unknown): string {
   return `#${r}${g}${b}`;
 }
 
+function parseShapeDimension(value: string, fallback: number): number {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(20, Math.min(1200, numeric));
+}
+
+function setSelectedShapeKind(kind: ShapeKind): void {
+  selectedShapeKind = kind;
+  shapeKindButtons.forEach((button) => {
+    const buttonKind = button.dataset.shapeKind;
+    button.classList.toggle("active", buttonKind === kind);
+  });
+
+  const isRect = kind === "rect";
+  shapeRoundedWrap.hidden = !isRect;
+}
+
+function openShapePopover(): void {
+  shapePopover.hidden = false;
+  addShapeBtn.classList.add("is-active");
+}
+
+function closeShapePopover(): void {
+  shapePopover.hidden = true;
+  addShapeBtn.classList.remove("is-active");
+}
+
+function toggleShapePopover(): void {
+  if (shapePopover.hidden) {
+    openShapePopover();
+    return;
+  }
+
+  closeShapePopover();
+}
+
+function readShapeOptionsFromInputs(): ShapeOptions {
+  const kind = selectedShapeKind;
+
+  const colorHex = /^#[0-9a-fA-F]{6}$/.test(shapeColorInput.value.trim())
+    ? shapeColorInput.value.trim()
+    : "#2563eb";
+
+  const width = parseShapeDimension(shapeWidthInput.value, 160);
+  const height = parseShapeDimension(shapeHeightInput.value, 110);
+
+  return {
+    kind,
+    colorHex,
+    width,
+    height,
+    rounded: kind === "rect" ? shapeRoundedInput.checked : false
+  };
+}
+
+function syncShapeInputsFromSelection(): void {
+  const snapshot = overlay.getActiveShapeSnapshot();
+  shapeApplyBtn.disabled = !snapshot;
+  if (!snapshot) {
+    return;
+  }
+
+  setSelectedShapeKind(snapshot.kind);
+  shapeColorInput.value = normalizeColor(snapshot.colorHex);
+  shapeWidthInput.value = String(Math.max(20, Math.round(snapshot.width)));
+  shapeHeightInput.value = String(Math.max(20, Math.round(snapshot.height)));
+  shapeRoundedInput.checked = snapshot.rounded ?? true;
+}
+
+function cloneSnapshot(snapshot: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>;
+}
+
+function entryEquals(a: OverlayHistoryEntry, b: OverlayHistoryEntry): boolean {
+  if (a.page !== b.page) {
+    return false;
+  }
+
+  return JSON.stringify(a.snapshot) === JSON.stringify(b.snapshot);
+}
+
+function updateHistoryControlsState(): void {
+  undoBtn.disabled = overlayUndoStack.length <= 1;
+  redoBtn.disabled = overlayRedoStack.length === 0;
+}
+
+function recordOverlaySnapshot(clearRedo: boolean): void {
+  if (suspendHistoryTracking || restoreInProgress) {
+    return;
+  }
+
+  const entry: OverlayHistoryEntry = {
+    page: currentPage,
+    snapshot: cloneSnapshot(overlay.serialize())
+  };
+
+  const last = overlayUndoStack[overlayUndoStack.length - 1];
+  if (last && entryEquals(last, entry)) {
+    updateHistoryControlsState();
+    return;
+  }
+
+  overlayUndoStack.push(entry);
+  if (overlayUndoStack.length > MAX_OVERLAY_HISTORY) {
+    overlayUndoStack.shift();
+  }
+
+  if (clearRedo) {
+    overlayRedoStack.length = 0;
+  }
+
+  updateHistoryControlsState();
+}
+
+async function applyHistoryEntry(entry: OverlayHistoryEntry): Promise<void> {
+  restoreInProgress = true;
+  suspendHistoryTracking = true;
+
+  try {
+    pageOverlayState.set(entry.page, cloneSnapshot(entry.snapshot));
+
+    if (entry.page === currentPage) {
+      await overlay.load(cloneSnapshot(entry.snapshot));
+    } else {
+      currentPage = entry.page;
+      await renderCurrentPage();
+    }
+
+    syncShapeInputsFromSelection();
+  } finally {
+    suspendHistoryTracking = false;
+    restoreInProgress = false;
+  }
+}
+
+async function undoOverlayState(): Promise<void> {
+  if (overlayUndoStack.length <= 1) {
+    setStatus("No hay mas cambios para deshacer.");
+    return;
+  }
+
+  const current = overlayUndoStack.pop();
+  if (!current) {
+    updateHistoryControlsState();
+    return;
+  }
+
+  overlayRedoStack.push(current);
+  const target = overlayUndoStack[overlayUndoStack.length - 1];
+  if (!target) {
+    updateHistoryControlsState();
+    return;
+  }
+
+  await applyHistoryEntry(target);
+  setStatus("Estado anterior restaurado.");
+  updateHistoryControlsState();
+}
+
+async function redoOverlayState(): Promise<void> {
+  const target = overlayRedoStack.pop();
+  if (!target) {
+    setStatus("No hay cambios para rehacer.");
+    updateHistoryControlsState();
+    return;
+  }
+
+  await applyHistoryEntry(target);
+  overlayUndoStack.push(cloneSnapshotEntry(target));
+  setStatus("Estado siguiente restaurado.");
+  updateHistoryControlsState();
+}
+
+function cloneSnapshotEntry(entry: OverlayHistoryEntry): OverlayHistoryEntry {
+  return {
+    page: entry.page,
+    snapshot: cloneSnapshot(entry.snapshot)
+  };
+}
+
 function collectTextPlacementsFromSerialized(serialized: Record<string, unknown>, pageIndex: number): TextPlacement[] {
   const objects = Array.isArray((serialized as { objects?: unknown[] }).objects)
     ? ((serialized as { objects?: unknown[] }).objects as unknown[])
@@ -1103,6 +1290,39 @@ function collectTextPlacementsFromSerialized(serialized: Record<string, unknown>
       };
     })
     .filter((item): item is TextPlacement => Boolean(item && item.text.trim()));
+}
+
+function collectShapePlacementsFromSerialized(serialized: Record<string, unknown>, pageIndex: number): ShapePlacement[] {
+  const objects = Array.isArray((serialized as { objects?: unknown[] }).objects)
+    ? ((serialized as { objects?: unknown[] }).objects as unknown[])
+    : [];
+
+  return objects
+    .map((obj) => obj as Record<string, unknown>)
+    .filter((obj) => String(obj.miniObjectType ?? "") === "shape")
+    .map((obj) => {
+      const kindRaw = String(obj.miniShapeKind ?? obj.type ?? "rect");
+      const kind: ShapePlacement["kind"] = kindRaw === "ellipse" || kindRaw === "triangle" ? kindRaw : "rect";
+      const width = kind === "ellipse"
+        ? Number(obj.rx ?? 0) * 2 * Number(obj.scaleX ?? 1)
+        : Number(obj.width ?? 0) * Number(obj.scaleX ?? 1);
+      const height = kind === "ellipse"
+        ? Number(obj.ry ?? 0) * 2 * Number(obj.scaleY ?? 1)
+        : Number(obj.height ?? 0) * Number(obj.scaleY ?? 1);
+
+      return {
+        pageIndex,
+        kind,
+        x: Number(obj.left ?? 0),
+        y: Number(obj.top ?? 0),
+        width,
+        height,
+        colorHex: normalizeColor(obj.fill),
+        rounded: kind === "rect" ? Number(obj.rx ?? 0) > 0.5 : undefined,
+        cornerRadius: kind === "rect" ? Number(obj.rx ?? 0) * Number(obj.scaleX ?? 1) : undefined
+      };
+    })
+    .filter((item) => item.width > 0 && item.height > 0);
 }
 
 async function renderPageThumbs(): Promise<void> {
@@ -1206,6 +1426,8 @@ async function renderCurrentPage(): Promise<void> {
   overlay.resize(result.width, result.height);
   const pageJson = pageOverlayState.get(currentPage) ?? null;
   await overlay.load(pageJson);
+  syncShapeInputsFromSelection();
+  recordOverlaySnapshot(false);
   requestAnimationFrame(() => {
     clampCanvasScroll("renderCurrentPage");
     debugCanvasLog("render-page", {
@@ -1229,9 +1451,6 @@ async function goToPage(nextPage: number): Promise<void> {
   await persistCurrentPageOverlay();
   currentPage = nextPage;
   await renderCurrentPage();
-  if (textEditModeEnabled) {
-    await detectEditableTextOnCurrentPage();
-  }
 }
 
 async function deletePage(pageToDelete: number): Promise<void> {
@@ -1256,6 +1475,9 @@ async function deletePage(pageToDelete: number): Promise<void> {
     pdfDoc.removePage(pageToDelete - 1);
     const nextBytes = await pdfDoc.save();
     sourcePdfBuffer = new Uint8Array(nextBytes).buffer;
+    overlayUndoStack.length = 0;
+    overlayRedoStack.length = 0;
+    updateHistoryControlsState();
 
     const nextOverlayState = remapPageStateAfterDelete(pageOverlayState, pageToDelete);
     pageOverlayState.clear();
@@ -1318,8 +1540,9 @@ async function applyPendingWorkspaceAction(action: PendingWorkspaceAction): Prom
   }
 
   if (action.mode === "edit-text") {
-    textEditModeEnabled = true;
-    await detectEditableTextOnCurrentPage();
+    overlay.addText("Nuevo texto");
+    await persistCurrentPageOverlay();
+    setStatus("Modo texto activado. Edita el texto con doble clic.");
   }
 }
 
@@ -1349,6 +1572,9 @@ async function loadSessionPdf(): Promise<void> {
   }
 
   try {
+    overlayUndoStack.length = 0;
+    overlayRedoStack.length = 0;
+    updateHistoryControlsState();
     sourcePdfBuffer = cloneArrayBuffer(normalizePdfBinary(response.arrayBuffer));
     sourceFileName = response.fileName ?? "documento.pdf";
     pageOverlayState.clear();
@@ -1413,6 +1639,8 @@ async function mergeAdditionalPdfs(files: FileList): Promise<void> {
   }
 
   const mergedBytes = await baseDoc.save();
+  overlayUndoStack.length = 0;
+  overlayRedoStack.length = 0;
   sourcePdfBuffer = new Uint8Array(mergedBytes).buffer;
   pageOverlayState.clear();
   pageThumbnailCache.clear();
@@ -1497,16 +1725,57 @@ addImageBtn.addEventListener("click", () => {
 addTextBtn.addEventListener("click", () => {
   void (async () => {
     overlay.addText("Nuevo texto");
-    await persistCurrentPageOverlay();
     setStatus("Texto agregado. Doble clic para editar contenido.");
+    syncShapeInputsFromSelection();
   })();
 });
 
-editTextBtn.addEventListener("click", () => {
-  void (async () => {
-    textEditModeEnabled = true;
-    await detectEditableTextOnCurrentPage();
-  })();
+addShapeBtn.addEventListener("click", () => {
+  toggleShapePopover();
+});
+
+shapeKindButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const kindRaw = button.dataset.shapeKind;
+    const kind: ShapeKind = kindRaw === "ellipse" || kindRaw === "triangle" ? kindRaw : "rect";
+    setSelectedShapeKind(kind);
+  });
+});
+
+shapeCreateBtn.addEventListener("click", () => {
+  const options = readShapeOptionsFromInputs();
+  overlay.addShape(options);
+  setStatus("Objeto geometrico agregado.");
+  syncShapeInputsFromSelection();
+  closeShapePopover();
+});
+
+shapeApplyBtn.addEventListener("click", () => {
+  const options = readShapeOptionsFromInputs();
+  const applied = overlay.updateActiveShape({
+    colorHex: options.colorHex,
+    width: options.width,
+    height: options.height,
+    rounded: options.rounded
+  });
+
+  if (applied) {
+    setStatus("Propiedades del objeto actualizadas.");
+  } else {
+    setStatus("Selecciona un objeto geometrico para aplicar cambios.");
+  }
+  syncShapeInputsFromSelection();
+  if (applied) {
+    closeShapePopover();
+  }
+});
+
+undoBtn.addEventListener("click", () => {
+  void undoOverlayState();
+});
+
+redoBtn.addEventListener("click", () => {
+  void redoOverlayState();
 });
 
 deleteObjectBtn.addEventListener("click", () => {
@@ -1557,6 +1826,18 @@ document.addEventListener("keydown", (event: KeyboardEvent) => {
     return;
   }
 
+  if (event.ctrlKey && event.key.toLowerCase() === "z" && !event.shiftKey) {
+    event.preventDefault();
+    void undoOverlayState();
+    return;
+  }
+
+  if ((event.ctrlKey && event.key.toLowerCase() === "y") || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "z")) {
+    event.preventDefault();
+    void redoOverlayState();
+    return;
+  }
+
   if (event.key === "Delete" || event.key === "Backspace" || event.key === "Supr") {
     event.preventDefault();
     const removed = overlay.removeActiveObject();
@@ -1566,6 +1847,27 @@ document.addEventListener("keydown", (event: KeyboardEvent) => {
       setStatus("Selecciona una imagen o texto para eliminar.");
     }
   }
+
+  if (event.key === "Escape") {
+    closeShapePopover();
+  }
+});
+
+document.addEventListener("click", (event: MouseEvent) => {
+  const target = event.target as Node | null;
+  if (!target || shapePopover.hidden) {
+    return;
+  }
+
+  if (shapePopover.contains(target) || addShapeBtn.contains(target)) {
+    return;
+  }
+
+  closeShapePopover();
+});
+
+canvasStackEl.addEventListener("click", () => {
+  syncShapeInputsFromSelection();
 });
 
 renderA4Placeholder();
@@ -1576,6 +1878,10 @@ initializeCanvasZoom();
 initializeCanvasPan();
 toggleToolTab("stamps");
 closeExportNamePopover(true);
+setSelectedShapeKind("rect");
+closeShapePopover();
+shapeApplyBtn.disabled = true;
+updateHistoryControlsState();
 updateDocumentMeta();
 void renderPageThumbs();
 updatePageIndicator();

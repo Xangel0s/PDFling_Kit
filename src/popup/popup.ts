@@ -31,14 +31,17 @@ const endpointInput = document.getElementById("ai-endpoint") as HTMLInputElement
 const apiKeyInput = document.getElementById("ai-apikey") as HTMLInputElement;
 const settingsSaveBtn = document.getElementById("settings-save") as HTMLButtonElement;
 const settingsCancelBtn = document.getElementById("settings-cancel") as HTMLButtonElement;
+const languageToggleBtn = document.getElementById("language-toggle-btn") as HTMLButtonElement;
 
 const ONBOARDING_KEY = "onboardingCompleted";
 const AI_ENDPOINT_KEY = "aiEndpoint";
 const AI_APIKEY_KEY = "aiApiKey";
 const HISTORY_KEY = "recentWorkspaceHistory";
 const WORKSPACE_PENDING_ACTION_KEY = "workspacePendingAction";
+const POPUP_LANGUAGE_KEY = "popupLanguage";
 const MAX_HISTORY_ITEMS = 15;
 let pendingModeAfterPdfPick: Exclude<PopupActionMode, "default" | "merge"> | null = null;
+let popupLanguage: PopupLanguage = "es";
 
 function debugLog(step: string, detail?: unknown): void {
   if (detail !== undefined) {
@@ -50,6 +53,59 @@ function debugLog(step: string, detail?: unknown): void {
 }
 
 type PopupActionMode = "default" | "merge" | "add-image" | "edit-text";
+type PopupLanguage = "es" | "en";
+
+interface LanguageCopy {
+  dropTitle: string;
+  dropSubtitle: string;
+  selectFileButton: string;
+  aboutKicker: string;
+  aboutText: string;
+  actionMerge: string;
+  actionImage: string;
+  actionText: string;
+  historyTooltip: string;
+  storageTooltip: string;
+  settingsTooltip: string;
+  dropzoneAria: string;
+  languageAria: string;
+  switchTo: string;
+}
+
+const UI_COPY: Record<PopupLanguage, LanguageCopy> = {
+  es: {
+    dropTitle: "Subir PDF",
+    dropSubtitle: "Arrastra y suelta o haz clic para buscar",
+    selectFileButton: "Seleccionar archivo",
+    aboutKicker: "Sobre PDFling",
+    aboutText: "PDFling te ayuda a editar, combinar y preparar PDFs en local con una experiencia rapida y clara.",
+    actionMerge: "Unir PDFs",
+    actionImage: "Agregar Imagen",
+    actionText: "Editar Texto",
+    historyTooltip: "Historial",
+    storageTooltip: "Storage",
+    settingsTooltip: "Ajustes",
+    dropzoneAria: "Seleccionar PDF",
+    languageAria: "Cambiar idioma",
+    switchTo: "EN"
+  },
+  en: {
+    dropTitle: "Upload PDF",
+    dropSubtitle: "Drag and drop or click to browse",
+    selectFileButton: "Select File",
+    aboutKicker: "About PDFling",
+    aboutText: "PDFling helps you edit, merge, and prepare PDFs locally with a fast and clear workflow.",
+    actionMerge: "Merge PDFs",
+    actionImage: "Add Image",
+    actionText: "Edit Text",
+    historyTooltip: "History",
+    storageTooltip: "Storage",
+    settingsTooltip: "Settings",
+    dropzoneAria: "Select PDF",
+    languageAria: "Change language",
+    switchTo: "ES"
+  }
+};
 
 interface WorkspaceHistoryItem {
   id: string;
@@ -71,6 +127,49 @@ function setStatus(message: string): void {
   statusEl.textContent = message;
 }
 
+function applyLanguage(language: PopupLanguage): void {
+  popupLanguage = language;
+  const copy = UI_COPY[language];
+
+  document.documentElement.lang = language;
+
+  document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((element) => {
+    const key = element.dataset.i18n as keyof LanguageCopy | undefined;
+    if (!key) {
+      return;
+    }
+
+    const value = copy[key];
+    if (typeof value === "string") {
+      element.textContent = value;
+    }
+  });
+
+  dropzone.setAttribute("aria-label", copy.dropzoneAria);
+  expandBtn.title = copy.historyTooltip;
+  expandBtn.setAttribute("aria-label", copy.historyTooltip);
+  storageBtn.title = copy.storageTooltip;
+  storageBtn.setAttribute("aria-label", copy.storageTooltip);
+  settingsBtn.title = copy.settingsTooltip;
+  settingsBtn.setAttribute("aria-label", copy.settingsTooltip);
+  languageToggleBtn.title = copy.languageAria;
+  languageToggleBtn.setAttribute("aria-label", copy.languageAria);
+  languageToggleBtn.textContent = copy.switchTo;
+}
+
+async function initLanguage(): Promise<void> {
+  const stored = await chrome.storage.local.get([POPUP_LANGUAGE_KEY]);
+  const candidate = stored[POPUP_LANGUAGE_KEY];
+  const language = candidate === "en" ? "en" : "es";
+  applyLanguage(language);
+}
+
+async function toggleLanguage(): Promise<void> {
+  const next: PopupLanguage = popupLanguage === "es" ? "en" : "es";
+  applyLanguage(next);
+  await chrome.storage.local.set({ [POPUP_LANGUAGE_KEY]: next });
+}
+
 function openPdfPicker(clearPendingMode: boolean): void {
   if (clearPendingMode) {
     pendingModeAfterPdfPick = null;
@@ -82,7 +181,7 @@ function openPdfPicker(clearPendingMode: boolean): void {
 }
 
 function formatDate(value: number): string {
-  return new Date(value).toLocaleString("es-ES", {
+  return new Date(value).toLocaleString(popupLanguage === "en" ? "en-US" : "es-ES", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -639,6 +738,10 @@ settingsCancelBtn.addEventListener("click", () => {
   closeSettings();
 });
 
+languageToggleBtn.addEventListener("click", () => {
+  void toggleLanguage();
+});
+
 expandBtn.addEventListener("click", () => {
   void (async () => {
     const stored = await chrome.storage.local.get([HISTORY_KEY]);
@@ -719,3 +822,4 @@ welcomeDoneButton.addEventListener("click", () => {
 });
 
 void initOnboarding();
+void initLanguage();

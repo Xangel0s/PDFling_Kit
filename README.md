@@ -70,7 +70,7 @@ Si quieres colaborar en UI, DX o rendimiento de PDFs, eres bienvenido.
 
 ## Captura
 
-![Mini Sterling Workspace](./screen.png)
+![Mini Sterling Workspace](./img2.png)
 
 ---
 

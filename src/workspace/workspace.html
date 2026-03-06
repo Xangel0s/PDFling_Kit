@@ -71,17 +71,58 @@
             <button id="add-image-btn" type="button" class="floating-tool-btn" title="Agregar Imagen" data-tooltip="Agregar Imagen">
               <span class="material-symbols-outlined">image</span>
             </button>
-            <button id="edit-text-btn" type="button" class="floating-tool-btn" title="Editar Texto" data-tooltip="Editar Texto">
-              <span class="material-symbols-outlined">ink_pen</span>
-            </button>
             <button id="add-text-btn" type="button" class="floating-tool-btn" title="Agregar Texto" data-tooltip="Agregar Texto">
               <span class="material-symbols-outlined">text_fields</span>
+            </button>
+            <button id="add-shape-btn" type="button" class="floating-tool-btn" title="Agregar Objeto" data-tooltip="Agregar Objeto">
+              <span class="material-symbols-outlined">category</span>
             </button>
             <button id="delete-object-btn" type="button" class="floating-tool-btn danger" title="Eliminar Seleccion" data-tooltip="Eliminar Seleccion">
               <span class="material-symbols-outlined">delete</span>
             </button>
           </div>
+          <section id="shape-popover" class="shape-popover" aria-label="Controles de figuras" hidden>
+            <div class="shape-quick-row" role="group" aria-label="Tipos de figura">
+              <button type="button" class="shape-kind-btn active" data-shape-kind="rect" title="Rectangulo">
+                <span class="material-symbols-outlined">rectangle</span>
+              </button>
+              <button type="button" class="shape-kind-btn" data-shape-kind="ellipse" title="Circulo">
+                <span class="material-symbols-outlined">circle</span>
+              </button>
+              <button type="button" class="shape-kind-btn" data-shape-kind="triangle" title="Triangulo">
+                <span class="material-symbols-outlined">change_history</span>
+              </button>
+            </div>
+            <div class="shape-mini-grid">
+              <label class="shape-mini-field">
+                <span>Color</span>
+                <input id="shape-color-input" type="color" value="#2563eb" />
+              </label>
+              <label class="shape-mini-field">
+                <span>Ancho</span>
+                <input id="shape-width-input" type="number" min="20" max="1200" step="1" value="160" />
+              </label>
+              <label class="shape-mini-field">
+                <span>Alto</span>
+                <input id="shape-height-input" type="number" min="20" max="1200" step="1" value="110" />
+              </label>
+              <label id="shape-rounded-wrap" class="shape-mini-check">
+                <input id="shape-rounded-input" type="checkbox" checked />
+                <span>Redondeado</span>
+              </label>
+            </div>
+            <div class="shape-mini-actions">
+              <button id="shape-create-btn" class="ghost-btn" type="button">Crear</button>
+              <button id="shape-apply-btn" class="ghost-btn" type="button">Aplicar</button>
+            </div>
+          </section>
           <div class="viewer-toolbar">
+            <button id="undo-btn" type="button" class="ghost-btn icon-ghost-btn" title="Deshacer (Ctrl+Z)">
+              <span class="material-symbols-outlined">undo</span>
+            </button>
+            <button id="redo-btn" type="button" class="ghost-btn icon-ghost-btn" title="Rehacer (Ctrl+Y)">
+              <span class="material-symbols-outlined">redo</span>
+            </button>
             <button id="prev-page-btn" type="button" class="ghost-btn">Anterior</button>
             <span id="page-indicator">Pagina 1 / 1</span>
             <span id="zoom-indicator" class="zoom-indicator" title="Zoom del lienzo">100%</span>

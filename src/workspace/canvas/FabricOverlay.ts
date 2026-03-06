@@ -18,8 +18,28 @@ export interface DetectedTextBlock {
   fontSize: number;
 }
 
+export type ShapeKind = "rect" | "ellipse" | "triangle";
+
+export interface ShapeOptions {
+  kind: ShapeKind;
+  width: number;
+  height: number;
+  colorHex: string;
+  rounded?: boolean;
+}
+
+interface ShapeSnapshot {
+  kind: ShapeKind;
+  width: number;
+  height: number;
+  colorHex: string;
+  rounded?: boolean;
+}
+
 export class FabricOverlay {
   private canvas: fabric.Canvas;
+  private mutationListeners = new Set<() => void>();
+  private suppressMutationEmit = false;
 
   constructor(canvasEl: HTMLCanvasElement) {
     this.canvas = new fabric.Canvas(canvasEl, {
@@ -54,6 +74,36 @@ export class FabricOverlay {
         editable.selectAll();
       }
       this.canvas.requestRenderAll();
+    });
+
+    this.canvas.on("object:added", () => {
+      this.emitMutation();
+    });
+    this.canvas.on("object:modified", () => {
+      this.emitMutation();
+    });
+    this.canvas.on("object:removed", () => {
+      this.emitMutation();
+    });
+    this.canvas.on("text:changed", () => {
+      this.emitMutation();
+    });
+  }
+
+  onMutation(listener: () => void): () => void {
+    this.mutationListeners.add(listener);
+    return () => {
+      this.mutationListeners.delete(listener);
+    };
+  }
+
+  private emitMutation(): void {
+    if (this.suppressMutationEmit) {
+      return;
+    }
+
+    this.mutationListeners.forEach((listener) => {
+      listener();
     });
   }
 
@@ -198,7 +248,6 @@ export class FabricOverlay {
       fontSize: 24,
       fill: "#1a2f4f",
       fontFamily: "Helvetica",
-      backgroundColor: "rgba(255,255,255,0.35)",
       cornerColor: "#1f4a80",
       transparentCorners: false,
       opacity: 0
@@ -244,7 +293,6 @@ export class FabricOverlay {
         fontFamily: "Helvetica",
         cornerColor: "#1f4a80",
         transparentCorners: false,
-        backgroundColor: "rgba(255,255,255,0.25)",
         editable: true,
         opacity: 0.96
       });
@@ -296,25 +344,175 @@ export class FabricOverlay {
     return targets.length;
   }
 
+  addShape(options: ShapeOptions): void {
+    const width = Math.max(20, options.width);
+    const height = Math.max(20, options.height);
+    const left = Math.max(16, this.canvas.getWidth() * 0.25);
+    const top = Math.max(16, this.canvas.getHeight() * 0.25);
+    let shape: fabric.Object;
+
+    if (options.kind === "ellipse") {
+      shape = new fabric.Ellipse({
+        left,
+        top,
+        rx: width / 2,
+        ry: height / 2,
+        fill: options.colorHex,
+        opacity: 0.92,
+        cornerColor: "#1f4a80",
+        transparentCorners: false
+      });
+    } else if (options.kind === "triangle") {
+      shape = new fabric.Triangle({
+        left,
+        top,
+        width,
+        height,
+        fill: options.colorHex,
+        opacity: 0.92,
+        cornerColor: "#1f4a80",
+        transparentCorners: false
+      });
+    } else {
+      const radius = options.rounded === false ? 0 : 12;
+      shape = new fabric.Rect({
+        left,
+        top,
+        width,
+        height,
+        fill: options.colorHex,
+        rx: radius,
+        ry: radius,
+        opacity: 0.92,
+        cornerColor: "#1f4a80",
+        transparentCorners: false
+      });
+    }
+
+    (shape as fabric.Object & { miniObjectType?: string; miniShapeKind?: ShapeKind }).miniObjectType = "shape";
+    (shape as fabric.Object & { miniObjectType?: string; miniShapeKind?: ShapeKind }).miniShapeKind = options.kind;
+
+    this.canvas.add(shape);
+    this.keepObjectInsideCanvas(shape);
+    this.canvas.setActiveObject(shape);
+    this.canvas.requestRenderAll();
+  }
+
+  updateActiveShape(options: { colorHex: string; width: number; height: number; rounded?: boolean }): boolean {
+    const active = this.canvas.getActiveObject() as (fabric.Object & { miniObjectType?: string; miniShapeKind?: ShapeKind }) | null;
+    if (!active || active.miniObjectType !== "shape") {
+      return false;
+    }
+
+    const width = Math.max(20, options.width);
+    const height = Math.max(20, options.height);
+    const colorHex = options.colorHex;
+    const kind = active.miniShapeKind ?? "rect";
+
+    active.set("fill", colorHex);
+
+    if (kind === "ellipse") {
+      const ellipse = active as fabric.Ellipse;
+      ellipse.set({
+        rx: width / 2,
+        ry: height / 2,
+        scaleX: 1,
+        scaleY: 1
+      });
+    } else if (kind === "rect") {
+      const rect = active as fabric.Rect;
+      const radius = options.rounded === false ? 0 : 12;
+      rect.set({
+        width,
+        height,
+        scaleX: 1,
+        scaleY: 1,
+        rx: radius,
+        ry: radius
+      });
+    } else {
+      active.set({
+        width,
+        height,
+        scaleX: 1,
+        scaleY: 1
+      });
+    }
+
+    this.keepObjectInsideCanvas(active);
+    this.canvas.requestRenderAll();
+    return true;
+  }
+
+  getActiveShapeSnapshot(): ShapeSnapshot | null {
+    const active = this.canvas.getActiveObject() as (fabric.Object & {
+      miniObjectType?: string;
+      miniShapeKind?: ShapeKind;
+      fill?: string;
+      width?: number;
+      height?: number;
+      scaleX?: number;
+      scaleY?: number;
+      rx?: number;
+      ry?: number;
+    }) | null;
+
+    if (!active || active.miniObjectType !== "shape") {
+      return null;
+    }
+
+    const kind = active.miniShapeKind ?? "rect";
+    if (kind === "ellipse") {
+      const w = (active.rx ?? 30) * 2 * (active.scaleX ?? 1);
+      const h = (active.ry ?? 30) * 2 * (active.scaleY ?? 1);
+      return {
+        kind,
+        width: Math.round(w),
+        height: Math.round(h),
+        colorHex: typeof active.fill === "string" ? active.fill : "#2563eb"
+      };
+    }
+
+    const w = (active.width ?? 120) * (active.scaleX ?? 1);
+    const h = (active.height ?? 80) * (active.scaleY ?? 1);
+    return {
+      kind,
+      width: Math.round(w),
+      height: Math.round(h),
+      colorHex: typeof active.fill === "string" ? active.fill : "#2563eb",
+      rounded: kind === "rect" ? Number(active.rx ?? 0) > 0.5 : undefined
+    };
+  }
+
   serialize(): Record<string, unknown> {
-    return this.canvas.toJSON(["miniStampId", "miniObjectType", "miniOriginalText"]);
+    return this.canvas.toJSON(["miniStampId", "miniObjectType", "miniOriginalText", "miniShapeKind"]);
   }
 
   clear(): void {
+    this.suppressMutationEmit = true;
     this.canvas.clear();
+    this.suppressMutationEmit = false;
   }
 
   load(serialized: Record<string, unknown> | null): Promise<void> {
     return new Promise((resolve) => {
+      this.suppressMutationEmit = true;
       if (!serialized) {
         this.clear();
+        this.suppressMutationEmit = false;
         this.canvas.requestRenderAll();
         resolve();
         return;
       }
 
       this.canvas.loadFromJSON(serialized, () => {
-        this.canvas.getObjects().forEach((obj) => this.keepObjectInsideCanvas(obj));
+        this.canvas.getObjects().forEach((obj) => {
+          if (obj.type === "textbox" || obj.type === "i-text" || obj.type === "text") {
+            obj.set("backgroundColor", "");
+          }
+          this.keepObjectInsideCanvas(obj);
+        });
+        this.suppressMutationEmit = false;
         this.canvas.requestRenderAll();
         resolve();
       });
